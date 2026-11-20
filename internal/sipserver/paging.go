@@ -51,6 +51,7 @@ func (s *Server) handlePagingInvite(req *sip.Request, tx sip.ServerTransaction, 
 		if err == ErrZoneBusy {
 			code, reason = 486, "Busy Here"
 		}
+		s.log.Warn("paging rejected", "zone", z.id, "code", code, "error", err)
 		_ = dss.Respond(code, reason, nil)
 		return
 	}

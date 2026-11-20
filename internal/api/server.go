@@ -15,6 +15,7 @@ import (
 
 	"github.com/coder/websocket"
 
+	"mcs/internal/logbus"
 	"mcs/internal/sipserver"
 	"mcs/internal/store"
 	"mcs/internal/webui"
@@ -27,6 +28,7 @@ type Server struct {
 	sip     *sipserver.Server
 	dataDir string
 	db      *store.DB
+	logs    *logbus.Hub
 	version string
 	started time.Time
 
@@ -39,6 +41,11 @@ type Server struct {
 // WithDB enables persistence for runtime settings such as TTS.
 func WithDB(db *store.DB) Option {
 	return func(s *Server) { s.db = db }
+}
+
+// WithLogHub exposes the in-memory log ring and live subscribers.
+func WithLogHub(hub *logbus.Hub) Option {
+	return func(s *Server) { s.logs = hub }
 }
 
 func New(st *store.Store, cdr *store.CDRStore, alarms *store.AlarmStore, sip *sipserver.Server, dataDir, version string, opts ...Option) *Server {
@@ -82,6 +89,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/alarms", s.alarmList)
 	mux.HandleFunc("GET /api/v1/alarms/{id}", s.alarmGet)
 	mux.HandleFunc("POST /api/v1/alarms/{id}/close", s.alarmClose)
+	mux.HandleFunc("GET /api/v1/logs", s.logRecent)
+	mux.HandleFunc("GET /api/v1/logs/ws", s.logsWS)
 	mux.HandleFunc("GET /api/v1/healthz", s.health)
 	mux.HandleFunc("GET /api/v1/system/info", s.info)
 	mux.HandleFunc("GET /api/v1/tts/config", s.ttsConfig)
@@ -522,6 +531,66 @@ func (s *Server) ws(w http.ResponseWriter, r *http.Request) {
 			err = conn.Write(wctx, websocket.MessageText, payload)
 			cancel()
 			if err != nil {
+				return
+			}
+		}
+	}
+}
+
+func (s *Server) logRecent(w http.ResponseWriter, r *http.Request) {
+	if s.logs == nil {
+		writeJSON(w, 503, map[string]any{"code": "UNAVAILABLE", "message": "log hub not enabled"})
+		return
+	}
+	items := s.logs.Recent()
+	limit := 500
+	if v := r.URL.Query().Get("limit"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			limit = n
+		}
+	}
+	if limit > len(items) {
+		limit = len(items)
+	}
+	writeJSON(w, 200, map[string]any{"items": items[len(items)-limit:], "total": len(items)})
+}
+
+func (s *Server) logsWS(w http.ResponseWriter, r *http.Request) {
+	if s.logs == nil {
+		http.Error(w, "log hub not enabled", http.StatusServiceUnavailable)
+		return
+	}
+	conn, err := websocket.Accept(w, r, nil)
+	if err != nil {
+		return
+	}
+	defer conn.Close(websocket.StatusNormalClosure, "")
+	ch, unsubscribe := s.logs.Subscribe()
+	defer unsubscribe()
+
+	ctx := r.Context()
+	write := func(v any) bool {
+		payload, err := json.Marshal(v)
+		if err != nil {
+			return true
+		}
+		wctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		err = conn.Write(wctx, websocket.MessageText, payload)
+		cancel()
+		return err == nil
+	}
+	if !write(map[string]any{"type": "history", "items": s.logs.Recent()}) {
+		return
+	}
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case e, ok := <-ch:
+			if !ok {
+				return
+			}
+			if !write(map[string]any{"type": "entry", "entry": e}) {
 				return
 			}
 		}

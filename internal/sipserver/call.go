@@ -299,6 +299,7 @@ func (s *Server) bridge(c *call, offer sdpInfo) {
 	if c.ctx.Err() == nil {
 		_ = c.a.Respond(code, reason, nil)
 	}
+	s.log.Info("call rejected", "call_id", c.id, "from", c.from, "to", c.to, "result", result, "code", code, "reason", reason, "targets", len(c.targets))
 	c.finish(result)
 }
 
@@ -427,8 +428,10 @@ func (c *call) tryTarget(t alarmTarget, offer sdpInfo) (bool, string) {
 
 	dcs, err := s.dua.WriteInvite(ctx, reqB)
 	if err != nil {
+		res := c.failureResult(err, ctx)
+		s.log.Info("b-leg invite failed", "call_id", c.id, "to", t.view.Ext, "result", res, "error", err)
 		c.cleanupAttempt()
-		return false, c.failureResult(err, ctx)
+		return false, res
 	}
 	c.stateMu.Lock()
 	c.b = dcs
@@ -471,9 +474,10 @@ func (c *call) tryTarget(t alarmTarget, offer sdpInfo) (bool, string) {
 		},
 	})
 	if err != nil {
-		s.log.Warn("b-leg wait answer failed", "call_id", c.id, "to", t.view.Ext, "error", err)
+		res := c.failureResult(err, ctx)
+		s.log.Info("b-leg attempt failed", "call_id", c.id, "to", t.view.Ext, "result", res, "error", err)
 		c.cleanupAttempt()
-		return false, c.failureResult(err, ctx)
+		return false, res
 	}
 
 	answer := dcs.InviteResponse.Body()

@@ -20,6 +20,7 @@ import (
 
 	"mcs/internal/api"
 	"mcs/internal/config"
+	"mcs/internal/logbus"
 	"mcs/internal/sipserver"
 	"mcs/internal/store"
 )
@@ -54,22 +55,24 @@ func main() {
 	}
 }
 
-func newLogger(logPath string) (*slog.Logger, io.Closer, error) {
+func newLogger(logPath string) (*slog.Logger, io.Closer, *logbus.Hub, error) {
 	var writers []io.Writer
 	writers = append(writers, os.Stdout)
 	var closer io.Closer
 	if logPath != "" {
 		if err := os.MkdirAll(filepath.Dir(logPath), 0o755); err != nil && filepath.Dir(logPath) != "." {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		f, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		closer = f
 		writers = append(writers, f)
 	}
-	return slog.New(slog.NewTextHandler(io.MultiWriter(writers...), &slog.HandlerOptions{Level: slog.LevelInfo})), closer, nil
+	hub := logbus.New(1500)
+	base := slog.NewTextHandler(io.MultiWriter(writers...), &slog.HandlerOptions{Level: slog.LevelInfo})
+	return slog.New(logbus.NewHandler(hub, base)), closer, hub, nil
 }
 
 func runServer(parent context.Context, configPath, logPath string) error {
@@ -78,7 +81,7 @@ func runServer(parent context.Context, configPath, logPath string) error {
 		return fmt.Errorf("%w\nhint: cp config.example.yaml config.yaml && edit it", err)
 	}
 
-	logger, logCloser, err := newLogger(logPath)
+	logger, logCloser, logHub, err := newLogger(logPath)
 	if err != nil {
 		return fmt.Errorf("open log: %w", err)
 	}
@@ -134,7 +137,7 @@ func runServer(parent context.Context, configPath, logPath string) error {
 	if cfg.Auth.ConsolePassword != "" {
 		apiOpts = append(apiOpts, api.WithConsoleAuth(consoleUser, cfg.Auth.ConsolePassword))
 	}
-	apiOpts = append(apiOpts, api.WithDB(db))
+	apiOpts = append(apiOpts, api.WithDB(db), api.WithLogHub(logHub))
 	handler := api.New(st, cdr, alarms, sipSrv, cfg.Storage.DataDir, version, apiOpts...).Handler()
 	httpSrv := &http.Server{
 		Addr:              cfg.Server.HTTP,

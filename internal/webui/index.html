@@ -138,6 +138,15 @@ textarea.bc-text{margin:0 17px 12px;width:calc(100% - 34px)}
   .panel{overflow-x:auto}
   table{min-width:620px}
 }
+.log-view{height:64vh;min-height:320px;overflow:auto;margin:0 17px 16px;background:#0b1220;border:1px solid #1b2b42;border-radius:10px;padding:8px 12px;font:12px/1.55 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:#c9d6e8}
+.log-line{display:flex;gap:9px;padding:3px 0;border-bottom:1px solid rgba(255,255,255,.045);white-space:pre-wrap;word-break:break-word}
+.log-time{color:#6f86a6;flex:0 0 92px;white-space:nowrap}
+.log-level{flex:0 0 44px;font-weight:700}
+.log-msg{flex:1;min-width:0}
+.log-attrs{color:#8fa6c4}
+.log-DEBUG .log-level{color:#8b9bb4}.log-INFO .log-level{color:#5cc8ff}
+.log-WARN .log-level{color:#f4c95d}.log-ERROR .log-level{color:#ff7b8a}
+.log-empty{color:#6f86a6;padding:16px 4px}
 </style>
 </head>
 <body>
@@ -180,6 +189,7 @@ textarea.bc-text{margin:0 17px 12px;width:calc(100% - 34px)}
       <option value="devices">配置 · 设备管理</option>
       <option value="media">配置 · 音频库</option>
       <option value="schedules">配置 · 定时任务</option>
+      <option value="logs">配置 · 实时日志</option>
       <option value="tts">配置 · TTS 设置</option>
       <option value="system">配置 · 系统信息</option>
     </select>
@@ -193,6 +203,7 @@ textarea.bc-text{margin:0 17px 12px;width:calc(100% - 34px)}
       <button class="nav-item" data-tab="devices" onclick="showTab('devices')">设备管理</button>
       <button class="nav-item" data-tab="media" onclick="showTab('media')">音频库</button>
       <button class="nav-item" data-tab="schedules" onclick="showTab('schedules')">定时任务</button>
+      <button class="nav-item" data-tab="logs" onclick="showTab('logs')">实时日志</button>
       <button class="nav-item" data-tab="tts" onclick="showTab('tts')">TTS 设置</button>
       <button class="nav-item" data-tab="system" onclick="showTab('system')">系统信息</button>
     </nav>
@@ -378,6 +389,31 @@ textarea.bc-text{margin:0 17px 12px;width:calc(100% - 34px)}
             <thead><tr><th>任务</th><th>分区</th><th>Cron</th><th>下次</th><th>状态</th><th>操作</th></tr></thead>
             <tbody id="sch-body"><tr><td colspan="6" class="empty">还没有定时任务</td></tr></tbody>
           </table>
+        </div>
+      </section>
+
+      <section id="tab-logs" class="tab-panel">
+        <div class="panel">
+          <div class="panel-head">
+            <h2>实时日志 <span id="log-count" class="hint"></span></h2>
+            <span class="hint" id="log-state">未连接</span>
+          </div>
+          <div class="form">
+            <select id="log-level" onchange="renderLogs()">
+              <option value="">全部级别</option>
+              <option value="DEBUG">DEBUG</option>
+              <option value="INFO">INFO</option>
+              <option value="WARN">WARN</option>
+              <option value="ERROR">ERROR</option>
+            </select>
+            <input type="text" id="log-filter" class="wide" placeholder="过滤关键字，例如 486、1001、b-leg" oninput="renderLogs()">
+            <label class="hint"><input type="checkbox" id="log-hide-http" checked onchange="renderLogs()"> 隐藏 HTTP 轮询</label>
+            <label class="hint"><input type="checkbox" id="log-pause" onchange="renderLogs()"> 暂停刷新</label>
+            <button class="btn" onclick="clearLogs()">清空显示</button>
+            <button class="btn" onclick="downloadLogs()">下载日志</button>
+          </div>
+          <div class="form-note">日志保存在内存中（最近 1500 条），页面关闭后不保留；需要长期保存请下载。</div>
+          <div id="log-view" class="log-view"><div class="log-empty">正在连接日志流…</div></div>
         </div>
       </section>
 
@@ -1010,6 +1046,110 @@ async function testTTS(){
   }catch(e){ $('tts-msg').textContent = '测试失败：' + e.message; }
 }
 
+let logSocket = null;
+let logReconnect = null;
+let logBuffer = [];
+const logMax = 2000;
+
+function logVisible(){
+  return document.getElementById('tab-logs')?.classList.contains('active');
+}
+
+function connectLogs(){
+  if(logSocket && (logSocket.readyState === WebSocket.OPEN || logSocket.readyState === WebSocket.CONNECTING)) return;
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  const state = $('log-state');
+  try {
+    logSocket = new WebSocket(proto + '://' + location.host + '/api/v1/logs/ws');
+  } catch(e) {
+    if(state) state.textContent = '连接失败';
+    return;
+  }
+  logSocket.onopen = () => { if(state) state.textContent = '已连接'; };
+  logSocket.onmessage = (ev) => {
+    try {
+      const data = JSON.parse(ev.data);
+      if(data.type === 'history') logBuffer = (data.items || []).slice(-logMax);
+      else if(data.type === 'entry' && data.entry) {
+        logBuffer.push(data.entry);
+        if(logBuffer.length > logMax) logBuffer = logBuffer.slice(-logMax);
+      } else return;
+      if(logVisible() && !$('log-pause').checked) renderLogs();
+    } catch(e) {}
+  };
+  logSocket.onerror = () => { if(state) state.textContent = '连接异常'; };
+  logSocket.onclose = () => {
+    logSocket = null;
+    if(state) state.textContent = '已断开';
+    if(logVisible()){
+      clearTimeout(logReconnect);
+      logReconnect = setTimeout(connectLogs, 2000);
+    }
+  };
+}
+
+function formatLogTime(value){
+  const d = new Date(value || '');
+  if(Number.isNaN(d.getTime())) return (value || '').replace('T',' ').slice(11,23);
+  const p = n => String(n).padStart(2,'0');
+  return p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds()) + '.' + String(d.getMilliseconds()).padStart(3,'0');
+}
+
+function logEntryText(e){
+  const attrs = Object.entries(e.attrs || {}).map(([k,v]) => k + '=' + v).join(' ');
+  return (e.time || '') + ' ' + (e.level || '') + ' ' + (e.message || '') + (attrs ? ' ' + attrs : '');
+}
+
+function renderLogs(){
+  const view = $('log-view');
+  if(!view) return;
+  if($('log-pause')?.checked){
+    $('log-count').textContent = logBuffer.length + ' 条（已暂停）';
+    return;
+  }
+  const level = $('log-level').value;
+  const q = ($('log-filter').value || '').trim().toLowerCase();
+  const hideHTTP = $('log-hide-http')?.checked;
+  const items = logBuffer.filter(e => {
+    if(level && e.level !== level) return false;
+    if(hideHTTP && /^http (GET|POST) \/api\//.test(e.message || '')) return false;
+    if(q && !logEntryText(e).toLowerCase().includes(q)) return false;
+    return true;
+  });
+  $('log-count').textContent = items.length + '/' + logBuffer.length + ' 条';
+  view.replaceChildren();
+  if(!items.length){
+    const empty = document.createElement('div'); empty.className = 'log-empty';
+    empty.textContent = logBuffer.length ? '没有匹配的日志' : '暂无日志';
+    view.appendChild(empty); return;
+  }
+  for(const e of items){
+    const line = document.createElement('div'); line.className = 'log-line log-' + (e.level || 'INFO');
+    const t = document.createElement('span'); t.className = 'log-time'; t.textContent = formatLogTime(e.time);
+    const l = document.createElement('span'); l.className = 'log-level'; l.textContent = e.level || '';
+    const m = document.createElement('span'); m.className = 'log-msg'; m.textContent = e.message || '';
+    const a = document.createElement('span'); a.className = 'log-attrs';
+    a.textContent = Object.entries(e.attrs || {}).map(([k,v]) => k + '=' + v).join(' ');
+    line.append(t,l,m,a); view.appendChild(line);
+  }
+  view.scrollTop = view.scrollHeight;
+}
+
+function clearLogs(){
+  logBuffer = [];
+  renderLogs();
+}
+
+function downloadLogs(){
+  const text = logBuffer.map(logEntryText).join('\n') + '\n';
+  const blob = new Blob([text], {type:'text/plain;charset=utf-8'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'mcs-log-' + new Date().toISOString().replace(/[:.]/g,'-') + '.txt';
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
 const tabMeta = {
   overview: ['总览', '常用操作与运行概况'],
   alarms: ['报警', '报警事件与处置'],
@@ -1018,6 +1158,7 @@ const tabMeta = {
   devices: ['设备管理', '分机、密码与上线状态'],
   media: ['音频库', '上传和管理广播 WAV'],
   schedules: ['定时任务', '按 cron 自动广播'],
+  logs: ['实时日志', '实时查看服务器运行与呼叫日志'],
   tts: ['TTS 设置', '本地/公网语音合成服务'],
   system: ['系统信息', '版本、分区与接口状态']
 };
@@ -1031,6 +1172,7 @@ function showTab(name){
   $('page-title').textContent = tabMeta[name][0];
   $('page-sub').textContent = tabMeta[name][1];
   if(location.hash !== '#' + name) history.replaceState(null, '', '#' + name);
+  if(name === 'logs'){ connectLogs(); renderLogs(); }
   window.scrollTo({top: 0, behavior: 'smooth'});
 }
 

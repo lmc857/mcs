@@ -98,6 +98,27 @@
 
 失败 `502 TTS_FAILED`。
 
+## 2.6 实时日志
+
+### GET `/api/v1/logs`
+
+最近日志（内存环形缓冲，最多 1500 条）：
+
+```json
+{"items":[{"time":"2026-11-20T09:45:51.749+08:00","level":"INFO","message":"mcs started","attrs":{}}],"total":1}
+```
+
+`?limit=200` 可限制返回条数。
+
+### GET `/api/v1/logs/ws`
+
+WebSocket 实时日志：
+
+- 连接后先收到 `{"type":"history","items":[...]}`；
+- 之后每条 `{"type":"log","entry":{...}}`。
+
+需要控制台登录 Cookie。日志只保存在内存，重启清空。
+
 ## 3. 设备
 
 设备字段（`DeviceView`）：

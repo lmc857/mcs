@@ -83,6 +83,22 @@ paths:
                   online: {type: integer}
                   transcode: {type: boolean}
 
+  /api/v1/logs:
+    get:
+      tags: [system]
+      summary: 最近内存日志
+      parameters:
+        - {name: limit, in: query, schema: {type: integer}}
+      responses:
+        '200': {description: OK}
+  /api/v1/logs/ws:
+    get:
+      tags: [system]
+      summary: 实时日志 WebSocket
+      responses:
+        '101': {description: WebSocket upgrade}
+        '503': {description: 日志 hub 未启用}
+
   /api/v1/tts/config:
     get:
       tags: [system]

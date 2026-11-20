@@ -14,6 +14,7 @@
 | [真机测试指南](MCS-真机测试指南.md) | LAN 拓扑、终端配置、测试用例、抓包排查 |
 | [广播终端接入](MCS-广播终端接入.md) | Alert-Info、SDP、PCMU、单播/组播实现要求 |
 | [TTS 服务配置](MCS-TTS服务配置.md) | 本地/OpenAI/千问/MiniMax，配置页与 API |
+| [实时日志](MCS-实时日志.md) | WebSocket 日志控制台、486 呼叫排查 |
 | [MCS 配置参考](MCS-配置参考.md) | `config.yaml` 字段/默认值/数据目录 |
 | [部署手册](../deploy/README.md) | systemd、Windows、Linux 包、SIP TLS、HTTPS、SRTP |
 
