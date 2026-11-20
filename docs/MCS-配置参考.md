@@ -61,6 +61,23 @@ data/
 | --- | --- | --- |
 | `transcode` | `false` | 是否对两端不同 G.711 编码做 PCMU/PCMA 转码。默认关闭：按 SDP 协商结果透传，便于暴露设备编码问题。 |
 
+## registration
+
+UDP 注册没有连接状态，断电/断网后只能等租期到期才会显示离线。
+
+| 字段 | 默认 | 说明 |
+| --- | --- | --- |
+| `default_expires_s` | `300` | 设备未带 Expires 时使用的租期 |
+| `max_expires_s` | `300` | 服务器接受的最大租期；设备给更长时按此值返回 |
+
+```yaml
+registration:
+  default_expires_s: 300
+  max_expires_s: 300
+```
+
+设备应在租期内重新 REGISTER；超过租期后网页自动显示离线。
+
 ## broadcast
 
 | 字段 | 默认 | 说明 |

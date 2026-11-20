@@ -9,15 +9,16 @@ import (
 
 // Config is the MCS runtime configuration (M0 slice).
 type Config struct {
-	Server    ServerConfig    `yaml:"server"`
-	Storage   StorageConfig   `yaml:"storage"`
-	Auth      AuthConfig      `yaml:"auth"`
-	Alarm     AlarmConfig     `yaml:"alarm"`
-	Broadcast BroadcastConfig `yaml:"broadcast"`
-	Media     MediaConfig     `yaml:"media"`
-	TTS       TTSConfig       `yaml:"tts"`
-	Zones     []ZoneConfig    `yaml:"zones"`
-	Devices   []DeviceConfig  `yaml:"devices"`
+	Server       ServerConfig       `yaml:"server"`
+	Storage      StorageConfig      `yaml:"storage"`
+	Auth         AuthConfig         `yaml:"auth"`
+	Alarm        AlarmConfig        `yaml:"alarm"`
+	Registration RegistrationConfig `yaml:"registration"`
+	Broadcast    BroadcastConfig    `yaml:"broadcast"`
+	Media        MediaConfig        `yaml:"media"`
+	TTS          TTSConfig          `yaml:"tts"`
+	Zones        []ZoneConfig       `yaml:"zones"`
+	Devices      []DeviceConfig     `yaml:"devices"`
 }
 
 type ServerConfig struct {
@@ -42,6 +43,11 @@ type AuthConfig struct {
 	Secret          string `yaml:"secret"`
 	ConsoleUser     string `yaml:"console_user"`
 	ConsolePassword string `yaml:"console_password"`
+}
+
+type RegistrationConfig struct {
+	DefaultExpiresS int `yaml:"default_expires_s"`
+	MaxExpiresS     int `yaml:"max_expires_s"`
 }
 
 type AlarmConfig struct {
@@ -147,6 +153,15 @@ func Load(path string) (Config, error) {
 	}
 	if cfg.Storage.DataDir == "" {
 		cfg.Storage.DataDir = "./data"
+	}
+	if cfg.Registration.DefaultExpiresS <= 0 {
+		cfg.Registration.DefaultExpiresS = 300
+	}
+	if cfg.Registration.MaxExpiresS <= 0 {
+		cfg.Registration.MaxExpiresS = 300
+	}
+	if cfg.Registration.DefaultExpiresS > cfg.Registration.MaxExpiresS {
+		cfg.Registration.DefaultExpiresS = cfg.Registration.MaxExpiresS
 	}
 	if cfg.Alarm.Number == "" {
 		cfg.Alarm.Number = "8000"

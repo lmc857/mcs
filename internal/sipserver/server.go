@@ -23,45 +23,47 @@ const serverName = "MCS/0.1"
 
 // Server owns the SIP stack: registration plus the M0 B2BUA call engine.
 type Server struct {
-	ua             *sipgo.UserAgent
-	srv            *sipgo.Server
-	client         *sipgo.Client
-	dua            *sipgo.DialogUA
-	store          *store.Store
-	auth           *Authenticator
-	log            *slog.Logger
-	domain         string
-	advertise      string
-	advertiseHost  string
-	dataDir        string
-	cdr            *store.CDRStore
-	alarms         *store.AlarmStore
-	alarmCfg       config.AlarmConfig
-	broadcastCfg   config.BroadcastConfig
-	mediaTranscode bool
-	zones          []zone
-	ttsMu          sync.RWMutex
-	ttsCfg         config.TTSConfig
-	ttsClient      *tts.Client
-	media          *mediaLibrary
-	schedules      *scheduleStore
-	bc             *broadcastManager
-	calls          *callRegistry
-	events         *eventBus
-	pagingMu       sync.Mutex
-	paging         map[string]*pagingSession
+	ua              *sipgo.UserAgent
+	srv             *sipgo.Server
+	client          *sipgo.Client
+	dua             *sipgo.DialogUA
+	store           *store.Store
+	auth            *Authenticator
+	log             *slog.Logger
+	domain          string
+	advertise       string
+	advertiseHost   string
+	dataDir         string
+	cdr             *store.CDRStore
+	alarms          *store.AlarmStore
+	alarmCfg        config.AlarmConfig
+	registrationCfg config.RegistrationConfig
+	broadcastCfg    config.BroadcastConfig
+	mediaTranscode  bool
+	zones           []zone
+	ttsMu           sync.RWMutex
+	ttsCfg          config.TTSConfig
+	ttsClient       *tts.Client
+	media           *mediaLibrary
+	schedules       *scheduleStore
+	bc              *broadcastManager
+	calls           *callRegistry
+	events          *eventBus
+	pagingMu        sync.Mutex
+	paging          map[string]*pagingSession
 }
 
 // Options carries the runtime configuration for the SIP server.
 type Options struct {
-	Domain    string
-	Advertise string
-	DataDir   string
-	Alarm     config.AlarmConfig
-	Broadcast config.BroadcastConfig
-	Media     config.MediaConfig
-	TTS       config.TTSConfig
-	Zones     []config.ZoneConfig
+	Domain       string
+	Advertise    string
+	DataDir      string
+	Alarm        config.AlarmConfig
+	Registration config.RegistrationConfig
+	Broadcast    config.BroadcastConfig
+	Media        config.MediaConfig
+	TTS          config.TTSConfig
+	Zones        []config.ZoneConfig
 }
 
 func New(st *store.Store, auth *Authenticator, cdr *store.CDRStore, alarms *store.AlarmStore, opts Options, log *slog.Logger) (*Server, error) {
@@ -217,6 +219,23 @@ func (s *Server) onRegister(req *sip.Request, tx sip.ServerTransaction) {
 		s.respond(req, tx, 200, "OK")
 		return
 	}
+	maxTTL := s.registrationCfg.MaxExpiresS
+	if maxTTL <= 0 {
+		maxTTL = 300
+	}
+	defaultTTL := s.registrationCfg.DefaultExpiresS
+	if defaultTTL <= 0 {
+		defaultTTL = maxTTL
+	}
+	if ttl == 0 && req.GetHeader("Expires") == nil && !contactHasExpires(req) {
+		ttl = defaultTTL
+	}
+	if ttl > maxTTL {
+		ttl = maxTTL
+	}
+	if ttl < 0 {
+		ttl = 0
+	}
 	if ttl <= 0 {
 		s.store.Unregister(ext)
 		s.log.Info("unregistered", "ext", ext, "source", req.Source())
@@ -308,7 +327,16 @@ func registrationTTL(req *sip.Request) (ttl int, hasContact bool) {
 			}
 		}
 	}
-	return 3600, true
+	return 0, true
+}
+
+func contactHasExpires(req *sip.Request) bool {
+	ch, ok := req.GetHeader("Contact").(*sip.ContactHeader)
+	if !ok {
+		return false
+	}
+	_, ok = ch.Params.Get("expires")
+	return ok
 }
 
 func headerValue(req *sip.Request, name string) string {

@@ -177,7 +177,7 @@ func runServer(parent context.Context, configPath, logPath string) error {
 	auth := sipserver.NewAuthenticator(cfg.Auth.Realm, secret)
 	sipSrv, err := sipserver.New(st, auth, cdr, alarms, sipserver.Options{
 		Domain: cfg.Server.Domain, Advertise: cfg.Server.Advertise, DataDir: cfg.Storage.DataDir,
-		Alarm: cfg.Alarm, Broadcast: cfg.Broadcast, Media: cfg.Media, TTS: ttsCfg, Zones: cfg.Zones,
+		Alarm: cfg.Alarm, Registration: cfg.Registration, Broadcast: cfg.Broadcast, Media: cfg.Media, TTS: ttsCfg, Zones: cfg.Zones,
 	}, logger)
 	if err != nil {
 		return fmt.Errorf("init sip server: %w", err)

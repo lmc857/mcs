@@ -349,8 +349,8 @@ textarea.bc-text{margin:0 17px 12px;width:calc(100% - 34px)}
         <div class="panel">
           <div class="panel-head"><h2>设备列表</h2><span class="hint">每 2 秒刷新</span></div>
           <table>
-            <thead><tr><th>分机</th><th>名称</th><th>区域</th><th>状态</th><th>联系地址</th><th>来源</th><th>型号 / 固件</th><th>最后注册</th><th>操作</th></tr></thead>
-            <tbody id="rows"><tr><td colspan="9" class="empty">加载中…</td></tr></tbody>
+            <thead><tr><th>分机</th><th>名称</th><th>区域</th><th>状态</th><th>联系地址</th><th>来源</th><th>型号 / 固件</th><th>最后注册</th><th>租期至</th><th>操作</th></tr></thead>
+            <tbody id="rows"><tr><td colspan="10" class="empty">加载中…</td></tr></tbody>
           </table>
         </div>
       </section>
@@ -597,7 +597,7 @@ function renderDevices(data){
   $('rate').textContent = total ? Math.round(online * 100 / total) + '%' : '—';
   const tbody = $('rows');
   if(!items.length){
-    tbody.innerHTML = '<tr><td colspan="9" class="empty">还没有设备，用上方表单添加</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="10" class="empty">还没有设备，用上方表单添加</td></tr>';
     return;
   }
   tbody.innerHTML = items.map(d => `
@@ -610,6 +610,7 @@ function renderDevices(data){
       <td class="mono">${esc(d.source || '—')}</td>
       <td class="badge">${esc(d.model || '—')}${d.firmware ? ' / ' + esc(d.firmware) : ''}</td>
       <td class="badge">${time(d.last_seen)}</td>
+      <td class="badge">${d.online ? time(d.expires_at) : '—'}</td>
       <td><button class="test-btn" onclick="deleteDevice('${esc(d.ext)}')">删除</button></td>
     </tr>`).join('');
 }
