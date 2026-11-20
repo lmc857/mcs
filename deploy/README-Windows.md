@@ -53,24 +53,24 @@ Build-Installer.cmd
 产物：
 
 ```text
-dist\MCS-Setup-0.3.1.exe
+dist\MCS-Setup-0.4.0.exe
 ```
 
 也可以指定版本：
 
 ```bat
-Build-Installer.cmd 0.3.1
+Build-Installer.cmd 0.4.0
 ```
 
-> 如果安装失败且没有日志，双击 `Install-Debug.cmd` 会在窗口显示每一步错误。0.3.1 已修复 PowerShell 5.1 下 UTF-8 构造函数的兼容问题，并增加了 `installer.log`、`prepare-config.log`。
+> 如果安装失败且没有日志，双击 `Install-Debug.cmd` 会在窗口显示每一步错误。0.4.0 已修复 PowerShell 5.1 下 UTF-8 构造函数的兼容问题，并增加了 `installer.log`、`prepare-config.log`。
 
 如果使用命令行，仍然可以：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\deploy\build-installer.ps1 -Version 0.3.1
+powershell -ExecutionPolicy Bypass -File .\deploy\build-installer.ps1 -Version 0.4.0
 ```
 
-安装包生成后，双击 `dist\MCS-Setup-0.3.1.exe`，按向导下一步。**不再要求填写 IP 和端口**：
+安装包生成后，双击 `dist\MCS-Setup-0.4.0.exe`，按向导下一步。**不再要求填写 IP 和端口**：
 
 - 自动检测默认路由所在网卡的局域网 IPv4；
 - 自动从 8080、18080-18150 中选择第一个空闲端口；
@@ -88,8 +88,21 @@ C:\ProgramData\MCS\install-info.txt
 静默安装也可以手动指定（可选）：
 
 ```powershell
-.\dist\MCS-Setup-0.3.1.exe /VERYSILENT /SERVERIP=192.168.68.106 /HTTPPORT=8080
+.\dist\MCS-Setup-0.4.0.exe /VERYSILENT /SERVERIP=192.168.68.106 /HTTPPORT=8080
 ```
+
+## 2.1 首次登录
+
+首次启动会创建一个 admin 用户：
+
+- 如果 `config.yaml` 设置了 `auth.console_password`，使用该密码；
+- 如果没有设置，会自动生成随机密码，保存到：
+
+```text
+C:\ProgramData\MCS\initial-admin.txt
+```
+
+登录后请立即在“用户管理”里修改密码，并删除该文件。
 
 ## 3. 控制页面打不开怎么查
 

@@ -40,7 +40,7 @@ type Server struct {
 	consoleUser string
 	consoleHash []byte
 	sessMu      sync.Mutex
-	sessions    map[string]time.Time
+	sessions    map[string]consoleSession
 }
 
 // WithDB enables persistence for runtime settings such as TTS.
@@ -71,6 +71,11 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/v1/login", s.login)
 	mux.HandleFunc("POST /api/v1/logout", s.logout)
 	mux.HandleFunc("GET /api/v1/session", s.sessionInfo)
+	mux.HandleFunc("GET /api/v1/users", s.usersList)
+	mux.HandleFunc("POST /api/v1/users", s.userCreate)
+	mux.HandleFunc("PATCH /api/v1/users/{username}", s.userUpdate)
+	mux.HandleFunc("DELETE /api/v1/users/{username}", s.userDelete)
+	mux.HandleFunc("POST /api/v1/me/password", s.mePassword)
 	mux.HandleFunc("GET /api/v1/devices", s.listDevices)
 	mux.HandleFunc("POST /api/v1/devices", s.deviceCreate)
 	mux.HandleFunc("PATCH /api/v1/devices/{ext}", s.deviceUpdate)

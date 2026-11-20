@@ -12,3 +12,5 @@ MCS-Setup-*.exe
 .gotmp/
 *.log
 .DS_Store
+
+initial-admin.txt

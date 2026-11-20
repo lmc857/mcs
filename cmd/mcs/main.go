@@ -15,10 +15,12 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
 	"mcs/internal/api"
+	"mcs/internal/auth"
 	"mcs/internal/config"
 	"mcs/internal/logbus"
 	"mcs/internal/sipserver"
@@ -75,6 +77,44 @@ func newLogger(logPath string) (*slog.Logger, io.Closer, *logbus.Hub, error) {
 	return slog.New(logbus.NewHandler(hub, base)), closer, hub, nil
 }
 
+func bootstrapUsers(db *store.DB, cfg config.Config, logger *slog.Logger) error {
+	if db.CountUsers() > 0 {
+		return nil
+	}
+	username := strings.TrimSpace(cfg.Auth.ConsoleUser)
+	if username == "" {
+		username = "admin"
+	}
+	password := cfg.Auth.ConsolePassword
+	generated := false
+	if password == "" {
+		random, err := auth.RandomPassword(18)
+		if err != nil {
+			return err
+		}
+		password = random
+		generated = true
+	}
+	hash, err := auth.HashPassword(password)
+	if err != nil {
+		return err
+	}
+	if err := db.CreateUser(store.User{
+		Username: username, PasswordHash: hash, Role: "admin", Enabled: true,
+	}); err != nil {
+		return err
+	}
+	if generated {
+		path := filepath.Join(cfg.Storage.DataDir, "initial-admin.txt")
+		content := "MCS 初始管理员账号\nusername: " + username + "\npassword: " + password + "\n请登录后立即修改密码并删除此文件。\n"
+		_ = os.WriteFile(path, []byte(content), 0o600)
+		logger.Warn("initial admin generated", "username", username, "password_file", path)
+	} else {
+		logger.Info("initial admin created from console credentials", "username", username)
+	}
+	return nil
+}
+
 func runServer(parent context.Context, configPath, logPath string) error {
 	cfg, err := config.Load(configPath)
 	if err != nil {
@@ -109,6 +149,10 @@ func runServer(parent context.Context, configPath, logPath string) error {
 		return fmt.Errorf("open sqlite %s: %w", dbPath, err)
 	}
 	defer db.Close()
+
+	if err := bootstrapUsers(db, cfg, logger); err != nil {
+		return fmt.Errorf("bootstrap users: %w", err)
+	}
 
 	ttsCfg := cfg.TTS
 	if raw, ok := db.GetSetting("tts"); ok {

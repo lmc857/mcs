@@ -83,6 +83,40 @@ paths:
                   online: {type: integer}
                   transcode: {type: boolean}
 
+  /api/v1/users:
+    get:
+      tags: [auth]
+      summary: 用户列表（admin）
+      responses:
+        '200': {description: OK}
+    post:
+      tags: [auth]
+      summary: 创建用户（admin）
+      responses:
+        '201': {description: 已创建}
+        '403': {description: 需要 admin}
+  /api/v1/users/{username}:
+    patch:
+      tags: [auth]
+      summary: 修改角色/状态/密码（admin）
+      parameters:
+        - {name: username, in: path, required: true, schema: {type: string}}
+      responses:
+        '200': {description: OK}
+    delete:
+      tags: [auth]
+      summary: 删除用户（admin）
+      parameters:
+        - {name: username, in: path, required: true, schema: {type: string}}
+      responses:
+        '200': {description: OK}
+  /api/v1/me/password:
+    post:
+      tags: [auth]
+      summary: 修改自己的密码
+      responses:
+        '200': {description: OK}
+
   /api/v1/system/settings:
     get:
       tags: [system]

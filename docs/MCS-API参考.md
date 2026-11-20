@@ -64,6 +64,39 @@
 
 未启用登录时 `auth_required=false`、`logged_in=true`。
 
+## 2.4 用户与权限
+
+### GET `/api/v1/users`（admin）
+
+### POST `/api/v1/users`（admin）
+
+```json
+{"username":"ops1","password":"至少8位","role":"operator"}
+```
+
+### PATCH `/api/v1/users/{username}`（admin）
+
+```json
+{"role":"viewer","enabled":true,"password":"可选"}
+```
+
+### DELETE `/api/v1/users/{username}`（admin）
+
+不能删除当前用户，至少保留一个启用的管理员。
+
+### POST `/api/v1/me/password`
+
+```json
+{"old_password":"...","new_password":"..."}
+```
+
+所有登录用户可修改自己的密码；登录 Cookie：
+
+- `HttpOnly`；
+- `SameSite=Strict`；
+- 12 小时；
+- 角色变更/禁用/删除/重置密码后旧会话失效。
+
 ## 2.5 TTS 设置
 
 ### GET `/api/v1/tts/config`

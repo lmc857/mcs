@@ -87,6 +87,15 @@ func (d *DB) migrate() error {
 		)`,
 		`CREATE TABLE IF NOT EXISTS schema_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)`,
 		`CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)`,
+		`CREATE TABLE IF NOT EXISTS users (
+			username TEXT PRIMARY KEY,
+			password_hash TEXT NOT NULL,
+			role TEXT NOT NULL,
+			enabled INTEGER NOT NULL DEFAULT 1,
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL,
+			last_login_at TEXT
+		)`,
 	}
 	for _, stmt := range stmts {
 		if _, err := d.sql.Exec(stmt); err != nil {

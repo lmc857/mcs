@@ -113,6 +113,7 @@ textarea.bc-text{margin:0 17px 12px;width:calc(100% - 34px)}
 .modal-card.login{width:min(380px,94vw);padding:20px}
 .modal-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
 .login h2{font-size:17px;margin-bottom:4px}
+.login .form.stacked input{flex:0 0 38px;height:38px;min-height:38px}
 .login .desc{color:var(--muted);font-size:12px;margin-bottom:14px}
 #video-el{width:100%;aspect-ratio:16/9;background:#000;border-radius:9px;display:block}
 .alarm-banner{position:fixed;left:50%;top:16px;transform:translateX(-50%);z-index:90;background:#fff1f2;border:1px solid #fecaca;color:#991b1b;border-radius:11px;padding:10px 14px;display:flex;align-items:center;gap:16px;box-shadow:0 12px 30px rgba(153,27,27,.16);font-size:13px;max-width:min(760px,94vw)}
@@ -191,9 +192,10 @@ textarea.bc-text{margin:0 17px 12px;width:calc(100% - 34px)}
       <option value="devices">配置 · 设备管理</option>
       <option value="media">配置 · 音频库</option>
       <option value="schedules">配置 · 定时任务</option>
-      <option value="settings">配置 · 系统设置</option>
+      <option value="settings" data-admin-only>配置 · 系统设置</option>
+      <option value="users" data-admin-only>配置 · 用户管理</option>
       <option value="logs">配置 · 实时日志</option>
-      <option value="tts">配置 · TTS 设置</option>
+      <option value="tts" data-admin-only>配置 · TTS 设置</option>
       <option value="system">配置 · 系统信息</option>
     </select>
     <nav>
@@ -206,9 +208,10 @@ textarea.bc-text{margin:0 17px 12px;width:calc(100% - 34px)}
       <button class="nav-item" data-tab="devices" onclick="showTab('devices')">设备管理</button>
       <button class="nav-item" data-tab="media" onclick="showTab('media')">音频库</button>
       <button class="nav-item" data-tab="schedules" onclick="showTab('schedules')">定时任务</button>
-      <button class="nav-item" data-tab="settings" onclick="showTab('settings')">系统设置</button>
+      <button class="nav-item" data-tab="settings" data-admin-only onclick="showTab('settings')">系统设置</button>
+      <button class="nav-item" data-tab="users" data-admin-only onclick="showTab('users')">用户管理</button>
       <button class="nav-item" data-tab="logs" onclick="showTab('logs')">实时日志</button>
-      <button class="nav-item" data-tab="tts" onclick="showTab('tts')">TTS 设置</button>
+      <button class="nav-item" data-tab="tts" data-admin-only onclick="showTab('tts')">TTS 设置</button>
       <button class="nav-item" data-tab="system" onclick="showTab('system')">系统信息</button>
     </nav>
     <div class="sidebar-foot">MCS 0.1 · 私有化通信服务器</div>
@@ -221,6 +224,7 @@ textarea.bc-text{margin:0 17px 12px;width:calc(100% - 34px)}
         <div class="sub" id="page-sub">常用操作与运行概况</div>
       </div>
       <div class="top-actions">
+        <span class="hint" id="who"></span>
         <button class="btn btn-sm" onclick="testAlarm()">测试报警</button>
         <span class="live"><span class="pulse"></span><span id="updated">等待数据…</span></span>
         <button id="logout-btn" class="btn btn-sm" onclick="doLogout()" hidden>退出</button>
@@ -393,6 +397,38 @@ textarea.bc-text{margin:0 17px 12px;width:calc(100% - 34px)}
             <thead><tr><th>任务</th><th>分区</th><th>Cron</th><th>下次</th><th>状态</th><th>操作</th></tr></thead>
             <tbody id="sch-body"><tr><td colspan="6" class="empty">还没有定时任务</td></tr></tbody>
           </table>
+        </div>
+      </section>
+
+      <section id="tab-users" class="tab-panel">
+        <div class="panel">
+          <div class="panel-head"><h2>控制台用户</h2><span class="hint">admin 管理全部；operator 可操作业务；viewer 只读</span></div>
+          <div class="form">
+            <input type="text" id="user-new-name" placeholder="用户名（2-32 位）" style="flex:0 1 180px">
+            <input type="password" id="user-new-pass" placeholder="初始密码（至少 8 位）" style="flex:0 1 200px">
+            <select id="user-new-role">
+              <option value="operator">operator · 业务操作</option>
+              <option value="viewer">viewer · 只读</option>
+              <option value="admin">admin · 管理员</option>
+            </select>
+            <button class="btn btn-primary" onclick="addUser()">新增用户</button>
+            <span class="hint" id="user-msg"></span>
+          </div>
+          <div class="table-wrap" style="padding:0 17px 16px">
+            <table>
+              <thead><tr><th>用户名</th><th>角色</th><th>启用</th><th>最后登录</th><th>操作</th></tr></thead>
+              <tbody id="user-rows"><tr><td colspan="5" class="empty">加载中…</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h2>修改我的密码</h2></div>
+          <div class="form">
+            <input type="password" id="me-old-pass" placeholder="当前密码" style="flex:0 1 180px">
+            <input type="password" id="me-new-pass" placeholder="新密码（至少 8 位）" style="flex:0 1 200px">
+            <button class="btn" onclick="changeMyPassword()">修改密码</button>
+            <span class="hint" id="me-msg"></span>
+          </div>
         </div>
       </section>
 
@@ -972,6 +1008,7 @@ function startApp(){
   loadSchedules();
   loadServerSettings();
   loadTTSConfig();
+  if(currentRole === 'admin') loadUsers();
   loadSystemInfo();
   showTab(location.hash ? location.hash.slice(1) : 'overview');
   refresh();
@@ -990,6 +1027,9 @@ async function boot(){
     }
     $('login-modal').hidden = true;
     $('logout-btn').hidden = !s.auth_required;
+    currentUser = s.user || '';
+    currentRole = s.role || (s.auth_required ? '' : 'admin');
+    applyRoleUI();
     startApp();
   }catch(e){
     $('login-modal').hidden = false;
@@ -1011,6 +1051,9 @@ async function doLogin(){
     $('login-modal').hidden = true;
     $('logout-btn').hidden = false;
     $('login-pass').value = '';
+    currentUser = data.user || '';
+    currentRole = data.role || 'admin';
+    applyRoleUI();
     startApp();
   }catch(e){ $('login-msg').textContent = '登录失败：' + e.message; }
 }
@@ -1099,6 +1142,108 @@ async function testTTS(){
 }
 
 let serverSettings = null;
+let currentUser = '';
+let currentRole = 'admin';
+
+function applyRoleUI(){
+  const admin = currentRole === 'admin';
+  document.querySelectorAll('[data-admin-only]').forEach(el => { el.hidden = !admin; });
+  const who = $('who'); if(who) who.textContent = currentUser ? currentUser + ' · ' + currentRole : '';
+  if(!admin){
+    const active = document.querySelector('.tab-panel.active');
+    if(active && ['tab-settings','tab-users','tab-tts'].includes(active.id)) showTab('overview');
+  }
+  if(admin){ const t = $('user-rows'); if(t && !t.dataset.loaded) loadUsers(); }
+}
+
+async function loadUsers(){
+  if(currentRole !== 'admin') return;
+  try{
+    const d = await getJSON('/api/v1/users');
+    const rows = $('user-rows');
+    const items = d.items || [];
+    rows.dataset.loaded = '1';
+    rows.innerHTML = items.length ? items.map(u => {
+      const name = esc(u.username);
+      const opts = ['admin','operator','viewer'].map(r => `<option value="${r}" ${u.role===r?'selected':''}>${r}</option>`).join('');
+      return `<tr data-username="${name}">
+        <td class="mono">${name}</td>
+        <td><select class="user-role">${opts}</select></td>
+        <td><input type="checkbox" class="user-enabled" ${u.enabled?'checked':''}></td>
+        <td class="hint">${esc((u.last_login_at||'—').replace('T',' ').slice(0,19))}</td>
+        <td><button class="test-btn" onclick="saveUser('${name}')">保存</button>
+        <button class="test-btn" onclick="resetUserPassword('${name}')">重置密码</button>
+        <button class="test-btn" onclick="deleteUser('${name}')">删除</button></td></tr>`;
+    }).join('') : '<tr><td colspan="5" class="empty">还没有用户</td></tr>';
+  }catch(e){ $('user-msg').textContent = '读取失败：' + e.message; }
+}
+
+function userRow(name){
+  return Array.from(document.querySelectorAll('#user-rows tr')).find(r => r.dataset.username === name);
+}
+
+async function addUser(){
+  const username = $('user-new-name').value.trim();
+  const password = $('user-new-pass').value;
+  const role = $('user-new-role').value;
+  if(!username || password.length < 8){ $('user-msg').textContent = '用户名必填，密码至少 8 位'; return; }
+  try{
+    const res = await fetch('/api/v1/users', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({username,password,role})});
+    const d = await res.json().catch(() => ({}));
+    if(!res.ok) throw new Error(d.message || ('HTTP ' + res.status));
+    $('user-msg').textContent = '用户 ' + username + ' 已创建';
+    $('user-new-name').value = ''; $('user-new-pass').value = '';
+    loadUsers();
+  }catch(e){ $('user-msg').textContent = '创建失败：' + e.message; }
+}
+
+async function saveUser(name){
+  const row = userRow(name); if(!row) return;
+  const body = {role: row.querySelector('.user-role').value, enabled: row.querySelector('.user-enabled').checked};
+  try{
+    const res = await fetch('/api/v1/users/' + encodeURIComponent(name), {method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+    const d = await res.json().catch(() => ({}));
+    if(!res.ok) throw new Error(d.message || ('HTTP ' + res.status));
+    $('user-msg').textContent = '已保存 ' + name;
+    loadUsers();
+  }catch(e){ $('user-msg').textContent = '保存失败：' + e.message; }
+}
+
+async function resetUserPassword(name){
+  const pass = prompt('输入 ' + name + ' 的新密码（至少 8 位）');
+  if(!pass) return;
+  if(pass.length < 8){ alert('密码至少 8 位'); return; }
+  try{
+    const res = await fetch('/api/v1/users/' + encodeURIComponent(name), {method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({password: pass})});
+    const d = await res.json().catch(() => ({}));
+    if(!res.ok) throw new Error(d.message || ('HTTP ' + res.status));
+    $('user-msg').textContent = '已重置 ' + name + ' 的密码';
+  }catch(e){ $('user-msg').textContent = '重置失败：' + e.message; }
+}
+
+async function deleteUser(name){
+  if(!confirm('删除用户 ' + name + '？')) return;
+  try{
+    const res = await fetch('/api/v1/users/' + encodeURIComponent(name), {method:'DELETE'});
+    const d = await res.json().catch(() => ({}));
+    if(!res.ok) throw new Error(d.message || ('HTTP ' + res.status));
+    $('user-msg').textContent = '已删除 ' + name;
+    loadUsers();
+  }catch(e){ $('user-msg').textContent = '删除失败：' + e.message; }
+}
+
+async function changeMyPassword(){
+  const old_password = $('me-old-pass').value;
+  const new_password = $('me-new-pass').value;
+  if(new_password.length < 8){ $('me-msg').textContent = '新密码至少 8 位'; return; }
+  try{
+    const res = await fetch('/api/v1/me/password', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({old_password,new_password})});
+    const d = await res.json().catch(() => ({}));
+    if(!res.ok) throw new Error(d.message || ('HTTP ' + res.status));
+    $('me-msg').textContent = '密码已修改';
+    $('me-old-pass').value = ''; $('me-new-pass').value = '';
+  }catch(e){ $('me-msg').textContent = '修改失败：' + e.message; }
+}
 
 function splitHostPort(value){
   const s = (value || '').trim();
@@ -1305,6 +1450,7 @@ const tabMeta = {
   media: ['音频库', '上传和管理广播 WAV'],
   schedules: ['定时任务', '按 cron 自动广播'],
   settings: ['系统设置', '网络、监听地址与业务参数'],
+  users: ['用户管理', '控制台账号与角色权限'],
   logs: ['实时日志', '实时查看服务器运行与呼叫日志'],
   tts: ['TTS 设置', '本地/公网语音合成服务'],
   system: ['系统信息', '版本、分区与接口状态']
@@ -1312,6 +1458,7 @@ const tabMeta = {
 
 function showTab(name){
   if(!tabMeta[name]) name = 'overview';
+  if(currentRole !== 'admin' && ['settings','users','tts'].includes(name)) name = 'overview';
   document.querySelectorAll('.tab-panel').forEach(el => el.classList.toggle('active', el.id === 'tab-' + name));
   document.querySelectorAll('.nav-item').forEach(el => el.classList.toggle('active', el.dataset.tab === name));
   const mobileNav = $('mobile-nav');

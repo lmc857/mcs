@@ -16,6 +16,7 @@
 | [TTS 服务配置](MCS-TTS服务配置.md) | 本地/OpenAI/千问/MiniMax，配置页与 API |
 | [实时日志](MCS-实时日志.md) | WebSocket 日志控制台、486 呼叫排查 |
 | [系统设置](MCS-系统设置与重启.md) | 网页修改网络/监听/业务参数、重启、回滚 |
+| [用户与权限](MCS-用户与权限.md) | admin/operator/viewer、首次管理员、用户管理 |
 | [MCS 配置参考](MCS-配置参考.md) | `config.yaml` 字段/默认值/数据目录 |
 | [部署手册](../deploy/README.md) | systemd、Windows、Linux 包、SIP TLS、HTTPS、SRTP |
 
