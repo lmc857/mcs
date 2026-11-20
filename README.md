@@ -15,6 +15,7 @@
 | [真机测试指南](docs/MCS-真机测试指南.md) | LAN 拓扑、终端配置、测试用例、抓包排查 |
 | [广播终端接入](docs/MCS-广播终端接入.md) | 广播协议、Alert-Info、SDP、单播/组播终端要求 |
 | [实时日志](docs/MCS-实时日志.md) | WebSocket 实时日志、486 排查、下载/过滤 |
+| [系统设置](docs/MCS-系统设置与重启.md) | 网页修改网络/监听/业务参数、重启、回滚 |
 | [TTS 服务配置](docs/MCS-TTS服务配置.md) | 本地/OpenAI/千问/MiniMax，控制台配置与 API |
 | [配置参考](docs/MCS-配置参考.md) | `config.yaml` 全字段与默认值 |
 | [部署手册](deploy/README.md) | systemd / Windows 服务 / Inno Setup 安装包 / HTTPS / TLS / SRTP |

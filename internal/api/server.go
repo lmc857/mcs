@@ -4,9 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -15,6 +18,7 @@ import (
 
 	"github.com/coder/websocket"
 
+	"mcs/internal/config"
 	"mcs/internal/logbus"
 	"mcs/internal/sipserver"
 	"mcs/internal/store"
@@ -22,15 +26,16 @@ import (
 )
 
 type Server struct {
-	store   *store.Store
-	cdr     *store.CDRStore
-	alarms  *store.AlarmStore
-	sip     *sipserver.Server
-	dataDir string
-	db      *store.DB
-	logs    *logbus.Hub
-	version string
-	started time.Time
+	store          *store.Store
+	cdr            *store.CDRStore
+	alarms         *store.AlarmStore
+	sip            *sipserver.Server
+	dataDir        string
+	db             *store.DB
+	logs           *logbus.Hub
+	activeSettings config.ServerSettings
+	version        string
+	started        time.Time
 
 	consoleUser string
 	consoleHash []byte
@@ -46,6 +51,11 @@ func WithDB(db *store.DB) Option {
 // WithLogHub exposes the in-memory log ring and live subscribers.
 func WithLogHub(hub *logbus.Hub) Option {
 	return func(s *Server) { s.logs = hub }
+}
+
+// WithServerSettings passes the effective startup settings to the API.
+func WithServerSettings(v config.ServerSettings) Option {
+	return func(s *Server) { s.activeSettings = v }
 }
 
 func New(st *store.Store, cdr *store.CDRStore, alarms *store.AlarmStore, sip *sipserver.Server, dataDir, version string, opts ...Option) *Server {
@@ -89,6 +99,11 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/alarms", s.alarmList)
 	mux.HandleFunc("GET /api/v1/alarms/{id}", s.alarmGet)
 	mux.HandleFunc("POST /api/v1/alarms/{id}/close", s.alarmClose)
+	mux.HandleFunc("GET /api/v1/system/settings", s.systemSettings)
+	mux.HandleFunc("PUT /api/v1/system/settings", s.systemSettingsSave)
+	mux.HandleFunc("POST /api/v1/system/settings/rollback", s.systemSettingsRollback)
+	mux.HandleFunc("GET /api/v1/system/interfaces", s.systemInterfaces)
+	mux.HandleFunc("POST /api/v1/system/restart", s.systemRestart)
 	mux.HandleFunc("GET /api/v1/logs", s.logRecent)
 	mux.HandleFunc("GET /api/v1/logs/ws", s.logsWS)
 	mux.HandleFunc("GET /api/v1/healthz", s.health)
@@ -535,6 +550,156 @@ func (s *Server) ws(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+}
+
+type serverSettingsView struct {
+	Active          config.ServerSettings `json:"active"`
+	Pending         config.ServerSettings `json:"pending"`
+	RestartRequired bool                  `json:"restart_required"`
+}
+
+func (s *Server) systemSettings(w http.ResponseWriter, r *http.Request) {
+	pending := s.activeSettings
+	if s.db != nil {
+		if raw, ok := s.db.GetSetting("server_settings"); ok {
+			var v config.ServerSettings
+			if json.Unmarshal([]byte(raw), &v) == nil && config.ValidateServerSettings(v) == nil {
+				pending = v
+			}
+		}
+	}
+	writeJSON(w, 200, serverSettingsView{
+		Active: s.activeSettings, Pending: pending,
+		RestartRequired: !pending.Equal(s.activeSettings),
+	})
+}
+
+func (s *Server) systemSettingsSave(w http.ResponseWriter, r *http.Request) {
+	if s.db == nil {
+		writeJSON(w, 503, map[string]any{"code": "UNAVAILABLE", "message": "settings storage unavailable"})
+		return
+	}
+	var v config.ServerSettings
+	if err := json.NewDecoder(r.Body).Decode(&v); err != nil {
+		writeJSON(w, 400, map[string]any{"code": "VALIDATION_FAILED", "message": "invalid json"})
+		return
+	}
+	if err := config.ValidateServerSettings(v); err != nil {
+		writeJSON(w, 400, map[string]any{"code": "VALIDATION_FAILED", "message": err.Error()})
+		return
+	}
+	if err := checkChangedListeners(s.activeSettings, v); err != nil {
+		writeJSON(w, 400, map[string]any{"code": "PORT_UNAVAILABLE", "message": err.Error()})
+		return
+	}
+	raw, _ := json.Marshal(v)
+	if err := s.db.SetSetting("server_settings", string(raw)); err != nil {
+		writeJSON(w, 500, map[string]any{"code": "INTERNAL", "message": err.Error()})
+		return
+	}
+	// Keep the previous active settings for one-click rollback.
+	if prev, err := json.Marshal(s.activeSettings); err == nil {
+		_ = s.db.SetSetting("server_settings_previous", string(prev))
+	}
+	writeJSON(w, 200, serverSettingsView{Active: s.activeSettings, Pending: v, RestartRequired: !v.Equal(s.activeSettings)})
+}
+
+func (s *Server) systemSettingsRollback(w http.ResponseWriter, r *http.Request) {
+	if s.db == nil {
+		writeJSON(w, 503, map[string]any{"code": "UNAVAILABLE", "message": "settings storage unavailable"})
+		return
+	}
+	raw, _ := json.Marshal(s.activeSettings)
+	_ = s.db.SetSetting("server_settings", string(raw))
+	writeJSON(w, 200, serverSettingsView{Active: s.activeSettings, Pending: s.activeSettings})
+}
+
+func (s *Server) systemInterfaces(w http.ResponseWriter, r *http.Request) {
+	defaultIP := ""
+	if c, err := net.Dial("udp", "8.8.8.8:80"); err == nil {
+		defaultIP = c.LocalAddr().(*net.UDPAddr).IP.String()
+		_ = c.Close()
+	}
+	items := []map[string]any{}
+	ifaces, _ := net.Interfaces()
+	for _, iface := range ifaces {
+		if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagLoopback != 0 {
+			continue
+		}
+		addrs, _ := iface.Addrs()
+		for _, a := range addrs {
+			ip, _, err := net.ParseCIDR(a.String())
+			if err != nil || ip.To4() == nil || ip.IsLoopback() || ip.IsLinkLocalUnicast() {
+				continue
+			}
+			items = append(items, map[string]any{
+				"name": iface.Name, "ip": ip.String(), "default": ip.String() == defaultIP,
+			})
+		}
+	}
+	writeJSON(w, 200, map[string]any{"items": items, "default": defaultIP})
+}
+
+func (s *Server) systemRestart(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, 202, map[string]any{"status": "restarting"})
+	go func() {
+		time.Sleep(700 * time.Millisecond)
+		os.Exit(1)
+	}()
+}
+
+func checkChangedListeners(old, next config.ServerSettings) error {
+	type check struct {
+		name, oldAddr, newAddr, network string
+	}
+	for _, c := range []check{
+		{"http", old.HTTP, next.HTTP, "tcp"},
+		{"https", old.HTTPS, next.HTTPS, "tcp"},
+		{"sip_udp", old.SIPUDP, next.SIPUDP, "udp"},
+	} {
+		if c.newAddr == "" || c.newAddr == c.oldAddr {
+			continue
+		}
+		op := addrPort(c.oldAddr)
+		np := addrPort(c.newAddr)
+		if op != "" && op == np {
+			continue
+		}
+		var err error
+		if c.network == "udp" {
+			var conn *net.UDPConn
+			conn, err = net.ListenUDP("udp", mustUDPAddr(c.newAddr))
+			if err == nil {
+				_ = conn.Close()
+			}
+		} else {
+			var ln net.Listener
+			ln, err = net.Listen("tcp", c.newAddr)
+			if err == nil {
+				_ = ln.Close()
+			}
+		}
+		if err != nil {
+			return fmt.Errorf("%s 新地址不可用：%v", c.name, err)
+		}
+	}
+	return nil
+}
+
+func addrPort(addr string) string {
+	_, p, err := net.SplitHostPort(addr)
+	if err != nil {
+		return ""
+	}
+	return p
+}
+
+func mustUDPAddr(addr string) *net.UDPAddr {
+	a, err := net.ResolveUDPAddr("udp", addr)
+	if err != nil {
+		return &net.UDPAddr{}
+	}
+	return a
 }
 
 func (s *Server) logRecent(w http.ResponseWriter, r *http.Request) {

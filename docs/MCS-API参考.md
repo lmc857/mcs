@@ -98,7 +98,36 @@
 
 失败 `502 TTS_FAILED`。
 
-## 2.6 实时日志
+## 2.6 系统设置
+
+### GET `/api/v1/system/settings`
+
+```json
+{"active":{"advertise":"192.168.68.106:5060","sip_udp":"0.0.0.0:5060","http":"0.0.0.0:8080","https":"","domain":"mcs.local","alarm_number":"8000","auto_answer":"...","transcode":false},
+ "pending":{...},"restart_required":true}
+```
+
+### PUT `/api/v1/system/settings`
+
+保存允许列表字段到 SQLite，重启后生效。会检查地址格式、端口范围和占用。
+
+### POST `/api/v1/system/settings/rollback`
+
+把 pending 恢复为当前 active。
+
+### GET `/api/v1/system/interfaces`
+
+返回本机 IPv4 地址、网卡名、默认路由标记，用于多网段选择设备访问 IP。
+
+### POST `/api/v1/system/restart`
+
+```json
+{"status":"restarting"}
+```
+
+进程以失败码退出，依赖 Windows Service/systemd 自动拉起。
+
+## 2.7 实时日志
 
 ### GET `/api/v1/logs`
 

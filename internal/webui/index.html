@@ -96,6 +96,8 @@ textarea{width:100%;min-height:84px;resize:vertical;line-height:1.6}
 .form input[type=text],.form input[type=password]{flex:0 1 150px}
 .form .wide{flex:1 1 260px}
 .form-note{color:var(--muted);font-size:12px;padding:0 17px 14px}
+.field{display:flex;flex-direction:column;gap:4px;color:var(--muted);font-size:12px;min-width:130px}
+.form .field input[type=text],.form .field input[type=password],.form .field select{flex:0 0 auto;width:100%;height:36px;min-height:36px}
 textarea.bc-text{margin:0 17px 12px;width:calc(100% - 34px)}
 .quick{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
 .quick .btn{justify-content:flex-start;padding:13px 14px;font-size:13px}
@@ -189,6 +191,7 @@ textarea.bc-text{margin:0 17px 12px;width:calc(100% - 34px)}
       <option value="devices">配置 · 设备管理</option>
       <option value="media">配置 · 音频库</option>
       <option value="schedules">配置 · 定时任务</option>
+      <option value="settings">配置 · 系统设置</option>
       <option value="logs">配置 · 实时日志</option>
       <option value="tts">配置 · TTS 设置</option>
       <option value="system">配置 · 系统信息</option>
@@ -203,6 +206,7 @@ textarea.bc-text{margin:0 17px 12px;width:calc(100% - 34px)}
       <button class="nav-item" data-tab="devices" onclick="showTab('devices')">设备管理</button>
       <button class="nav-item" data-tab="media" onclick="showTab('media')">音频库</button>
       <button class="nav-item" data-tab="schedules" onclick="showTab('schedules')">定时任务</button>
+      <button class="nav-item" data-tab="settings" onclick="showTab('settings')">系统设置</button>
       <button class="nav-item" data-tab="logs" onclick="showTab('logs')">实时日志</button>
       <button class="nav-item" data-tab="tts" onclick="showTab('tts')">TTS 设置</button>
       <button class="nav-item" data-tab="system" onclick="showTab('system')">系统信息</button>
@@ -389,6 +393,53 @@ textarea.bc-text{margin:0 17px 12px;width:calc(100% - 34px)}
             <thead><tr><th>任务</th><th>分区</th><th>Cron</th><th>下次</th><th>状态</th><th>操作</th></tr></thead>
             <tbody id="sch-body"><tr><td colspan="6" class="empty">还没有定时任务</td></tr></tbody>
           </table>
+        </div>
+      </section>
+
+      <section id="tab-settings" class="tab-panel">
+        <div class="panel">
+          <div class="panel-head"><h2>服务器设置</h2><span class="hint" id="settings-state"></span></div>
+          <div class="form">
+            <label class="field">设备访问 IP
+              <select id="settings-advertise-ip"></select>
+            </label>
+            <label class="field">SIP 端口
+              <input type="text" id="settings-advertise-port" placeholder="5060">
+            </label>
+            <label class="field">SIP 监听
+              <input type="text" id="settings-sip-udp" placeholder="0.0.0.0:5060">
+            </label>
+            <label class="field">HTTP 监听
+              <input type="text" id="settings-http" placeholder="0.0.0.0:8080">
+            </label>
+          </div>
+          <div class="form">
+            <label class="field">HTTPS 监听（留空关闭）
+              <input type="text" id="settings-https" placeholder="0.0.0.0:8443">
+            </label>
+            <label class="field">SIP 域名
+              <input type="text" id="settings-domain" placeholder="mcs.local">
+            </label>
+            <label class="field">报警号码
+              <input type="text" id="settings-alarm" placeholder="8000">
+            </label>
+            <label class="hint" style="align-self:flex-end"><input type="checkbox" id="settings-transcode"> G.711 转码</label>
+          </div>
+          <div class="form">
+            <label class="field" style="flex:1 1 100%">Alert-Info 自动应答头
+              <input type="text" id="settings-auto-answer" placeholder="&lt;http://127.0.0.1&gt;;info=alert-autoanswer">
+            </label>
+          </div>
+          <div class="form">
+            <button class="btn btn-primary" onclick="saveServerSettings()">保存设置</button>
+            <button class="btn btn-danger" onclick="restartServer()">重启服务器</button>
+            <button class="btn" onclick="rollbackServerSettings()">恢复上次生效</button>
+            <span class="hint" id="settings-msg"></span>
+          </div>
+          <div class="form-note">
+            保存后需重启生效；重启会中断通话和广播。监听地址只填写当前服务器实际使用的地址，多网段时请选择设备所在网卡的 IP。<br>
+            当前生效：<span id="settings-active" class="mono"></span>
+          </div>
         </div>
       </section>
 
@@ -919,6 +970,7 @@ function startApp(){
   loadZones();
   loadMedia();
   loadSchedules();
+  loadServerSettings();
   loadTTSConfig();
   loadSystemInfo();
   showTab(location.hash ? location.hash.slice(1) : 'overview');
@@ -1046,6 +1098,100 @@ async function testTTS(){
   }catch(e){ $('tts-msg').textContent = '测试失败：' + e.message; }
 }
 
+let serverSettings = null;
+
+function splitHostPort(value){
+  const s = (value || '').trim();
+  const i = s.lastIndexOf(':');
+  if(i <= 0) return [s, ''];
+  return [s.slice(0,i), s.slice(i+1)];
+}
+
+async function loadServerSettings(){
+  try{
+    const d = await getJSON('/api/v1/system/settings');
+    serverSettings = d;
+    const p = d.pending || d.active || {};
+    const [host, port] = splitHostPort(p.advertise);
+    const ipSel = $('settings-advertise-ip');
+    if(ipSel){
+      ipSel.replaceChildren();
+      const add = (ip, label) => {
+        const o = document.createElement('option'); o.value = ip; o.textContent = label; ipSel.appendChild(o);
+      };
+      try{
+        const nets = await getJSON('/api/v1/system/interfaces');
+        for(const n of (nets.items || [])) add(n.ip, n.ip + ' · ' + n.name + (n.default ? '（默认路由）' : ''));
+      }catch(e){}
+      if(host && !Array.from(ipSel.options).some(o => o.value === host)) add(host, host + '（当前配置）');
+      if(host) ipSel.value = host;
+    }
+    $('settings-advertise-port').value = port || '5060';
+    $('settings-sip-udp').value = p.sip_udp || '';
+    $('settings-http').value = p.http || '';
+    $('settings-https').value = p.https || '';
+    $('settings-domain').value = p.domain || '';
+    $('settings-alarm').value = p.alarm_number || '';
+    $('settings-auto-answer').value = p.auto_answer || '';
+    $('settings-transcode').checked = !!p.transcode;
+    $('settings-state').textContent = d.restart_required ? '有未应用修改' : '已生效';
+    $('settings-msg').textContent = '';
+    const a = d.active || {};
+    $('settings-active').textContent = 'advertise=' + (a.advertise || '—') + '  http=' + (a.http || '—') + '  sip=' + (a.sip_udp || '—');
+  }catch(e){ $('settings-msg').textContent = '读取失败：' + e.message; }
+}
+
+async function saveServerSettings(){
+  const ip = $('settings-advertise-ip').value.trim();
+  const port = $('settings-advertise-port').value.trim() || '5060';
+  if(!ip){ $('settings-msg').textContent = '请选择设备访问 IP'; return; }
+  const body = {
+    advertise: ip + ':' + port,
+    sip_udp: $('settings-sip-udp').value.trim(),
+    http: $('settings-http').value.trim(),
+    https: $('settings-https').value.trim(),
+    domain: $('settings-domain').value.trim(),
+    alarm_number: $('settings-alarm').value.trim(),
+    auto_answer: $('settings-auto-answer').value.trim(),
+    transcode: $('settings-transcode').checked
+  };
+  try{
+    const res = await fetch('/api/v1/system/settings', {method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+    const d = await res.json().catch(() => ({}));
+    if(!res.ok) throw new Error(d.message || ('HTTP ' + res.status));
+    $('settings-msg').textContent = d.restart_required ? '已保存，重启后生效' : '已保存';
+    loadServerSettings();
+  }catch(e){ $('settings-msg').textContent = '保存失败：' + e.message; }
+}
+
+async function rollbackServerSettings(){
+  if(!confirm('恢复上次生效的服务器设置？')) return;
+  try{
+    const res = await fetch('/api/v1/system/settings/rollback', {method:'POST'});
+    if(!res.ok) throw new Error('HTTP ' + res.status);
+    $('settings-msg').textContent = '已恢复，重启后生效';
+    loadServerSettings();
+  }catch(e){ $('settings-msg').textContent = '恢复失败：' + e.message; }
+}
+
+async function restartServer(){
+  if(!confirm('确认重启 MCS？当前通话、广播会中断。')) return;
+  $('settings-msg').textContent = '正在重启…';
+  try{
+    const res = await fetch('/api/v1/system/restart', {method:'POST'});
+    if(!res.ok) throw new Error('HTTP ' + res.status);
+    $('settings-state').textContent = '重启中';
+    for(let i=0;i<30;i++){
+      await new Promise(r => setTimeout(r, 1000));
+      try{
+        const h = await fetch('/api/v1/healthz');
+        if(h.ok){ location.reload(); return; }
+      }catch(e){}
+    }
+    $('settings-msg').textContent = '重启后未恢复，请检查服务日志';
+  }catch(e){ $('settings-msg').textContent = '重启失败：' + e.message; }
+}
+
 let logSocket = null;
 let logReconnect = null;
 let logBuffer = [];
@@ -1158,6 +1304,7 @@ const tabMeta = {
   devices: ['设备管理', '分机、密码与上线状态'],
   media: ['音频库', '上传和管理广播 WAV'],
   schedules: ['定时任务', '按 cron 自动广播'],
+  settings: ['系统设置', '网络、监听地址与业务参数'],
   logs: ['实时日志', '实时查看服务器运行与呼叫日志'],
   tts: ['TTS 设置', '本地/公网语音合成服务'],
   system: ['系统信息', '版本、分区与接口状态']

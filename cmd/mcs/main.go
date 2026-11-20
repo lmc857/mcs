@@ -117,6 +117,16 @@ func runServer(parent context.Context, configPath, logPath string) error {
 			ttsCfg = saved
 		}
 	}
+	if raw, ok := db.GetSetting("server_settings"); ok {
+		var saved config.ServerSettings
+		if err := json.Unmarshal([]byte(raw), &saved); err != nil {
+			logger.Warn("ignore invalid server settings", "error", err)
+		} else if err := cfg.ApplyServerSettings(saved); err != nil {
+			logger.Warn("ignore invalid server settings", "error", err)
+		} else {
+			logger.Info("server settings loaded from db", "advertise", saved.Advertise, "http", saved.HTTP, "sip_udp", saved.SIPUDP)
+		}
+	}
 	st := store.NewWithDB(cfg.Devices, db)
 	cdr := store.NewCDRStoreDB(2000, db)
 	alarms := store.NewAlarmStoreDB(1000, db)
@@ -137,7 +147,7 @@ func runServer(parent context.Context, configPath, logPath string) error {
 	if cfg.Auth.ConsolePassword != "" {
 		apiOpts = append(apiOpts, api.WithConsoleAuth(consoleUser, cfg.Auth.ConsolePassword))
 	}
-	apiOpts = append(apiOpts, api.WithDB(db), api.WithLogHub(logHub))
+	apiOpts = append(apiOpts, api.WithDB(db), api.WithLogHub(logHub), api.WithServerSettings(cfg.ServerSettings()))
 	handler := api.New(st, cdr, alarms, sipSrv, cfg.Storage.DataDir, version, apiOpts...).Handler()
 	httpSrv := &http.Server{
 		Addr:              cfg.Server.HTTP,

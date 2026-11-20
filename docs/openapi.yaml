@@ -83,6 +83,37 @@ paths:
                   online: {type: integer}
                   transcode: {type: boolean}
 
+  /api/v1/system/settings:
+    get:
+      tags: [system]
+      summary: 读取 active/pending 服务器设置
+      responses:
+        '200': {description: OK}
+    put:
+      tags: [system]
+      summary: 保存允许列表服务器设置
+      responses:
+        '200': {description: 已保存}
+        '400': {description: 校验或端口不可用}
+  /api/v1/system/settings/rollback:
+    post:
+      tags: [system]
+      summary: 恢复上次生效设置
+      responses:
+        '200': {description: OK}
+  /api/v1/system/interfaces:
+    get:
+      tags: [system]
+      summary: 本机 IPv4 网卡列表
+      responses:
+        '200': {description: OK}
+  /api/v1/system/restart:
+    post:
+      tags: [system]
+      summary: 重启 MCS（依赖服务管理器拉起）
+      responses:
+        '202': {description: 正在重启}
+
   /api/v1/logs:
     get:
       tags: [system]
