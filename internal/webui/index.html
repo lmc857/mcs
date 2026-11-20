@@ -467,6 +467,18 @@ textarea.bc-text{margin:0 17px 12px;width:calc(100% - 34px)}
             </label>
           </div>
           <div class="form">
+            <label class="hint" style="align-self:flex-end"><input type="checkbox" id="settings-heartbeat"> 启用 SIP OPTIONS 心跳</label>
+            <label class="field">心跳间隔（秒）
+              <input type="text" id="settings-hb-interval" placeholder="30">
+            </label>
+            <label class="field">超时（秒）
+              <input type="text" id="settings-hb-timeout" placeholder="5">
+            </label>
+            <label class="field">连续失败次数
+              <input type="text" id="settings-hb-failures" placeholder="3">
+            </label>
+          </div>
+          <div class="form">
             <button class="btn btn-primary" onclick="saveServerSettings()">保存设置</button>
             <button class="btn btn-danger" onclick="restartServer()">重启服务器</button>
             <button class="btn" onclick="rollbackServerSettings()">恢复上次生效</button>
@@ -1280,10 +1292,14 @@ async function loadServerSettings(){
     $('settings-alarm').value = p.alarm_number || '';
     $('settings-auto-answer').value = p.auto_answer || '';
     $('settings-transcode').checked = !!p.transcode;
+    $('settings-heartbeat').checked = !!p.heartbeat_enabled;
+    $('settings-hb-interval').value = p.heartbeat_interval_s || 30;
+    $('settings-hb-timeout').value = p.heartbeat_timeout_s || 5;
+    $('settings-hb-failures').value = p.heartbeat_failures || 3;
     $('settings-state').textContent = d.restart_required ? '有未应用修改' : '已生效';
     $('settings-msg').textContent = '';
     const a = d.active || {};
-    $('settings-active').textContent = 'advertise=' + (a.advertise || '—') + '  http=' + (a.http || '—') + '  sip=' + (a.sip_udp || '—');
+    $('settings-active').textContent = 'advertise=' + (a.advertise || '—') + '  http=' + (a.http || '—') + '  sip=' + (a.sip_udp || '—') + '  heartbeat=' + (a.heartbeat_enabled ? 'on' : 'off');
   }catch(e){ $('settings-msg').textContent = '读取失败：' + e.message; }
 }
 
@@ -1299,7 +1315,11 @@ async function saveServerSettings(){
     domain: $('settings-domain').value.trim(),
     alarm_number: $('settings-alarm').value.trim(),
     auto_answer: $('settings-auto-answer').value.trim(),
-    transcode: $('settings-transcode').checked
+    transcode: $('settings-transcode').checked,
+    heartbeat_enabled: $('settings-heartbeat').checked,
+    heartbeat_interval_s: Number($('settings-hb-interval').value) || 30,
+    heartbeat_timeout_s: Number($('settings-hb-timeout').value) || 5,
+    heartbeat_failures: Number($('settings-hb-failures').value) || 3
   };
   try{
     const res = await fetch('/api/v1/system/settings', {method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});

@@ -204,6 +204,7 @@ func runServer(parent context.Context, configPath, logPath string) error {
 	defer cancel()
 
 	sipSrv.StartScheduler(ctx)
+	sipSrv.StartHeartbeat(ctx)
 	go func() {
 		if err := sipSrv.Serve(ctx, cfg.Server.SIPUDP); err != nil && ctx.Err() == nil {
 			logger.Error("sip server stopped", "error", err)

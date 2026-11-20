@@ -197,6 +197,24 @@ func (s *Store) Register(ext, contact, source, ua, model, firmware string, ttl t
 	return true
 }
 
+// Touch marks a registration as alive after a successful OPTIONS probe.
+// The lease is extended so a device that re-registers less often than the
+// server heartbeat interval does not flap offline.
+func (s *Store) Touch(ext string, ttl time.Duration) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	d, ok := s.devices[ext]
+	if !ok || !d.Enabled || d.Contact == "" {
+		return false
+	}
+	now := time.Now()
+	d.LastSeen = now
+	if ttl > 0 {
+		d.ExpiresAt = now.Add(ttl)
+	}
+	return true
+}
+
 // Unregister removes the contact of an extension.
 func (s *Store) Unregister(ext string) bool {
 	s.mu.Lock()

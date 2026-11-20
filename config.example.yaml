@@ -33,6 +33,13 @@ registration:
   # 话机注册租期；UDP 断网/断电无法立刻感知，靠租期到期离线
   default_expires_s: 300
   max_expires_s: 300
+  # 可选 SIP OPTIONS 心跳：对已注册终端发 OPTIONS 快速确认在线
+  # 默认关闭；设备/NAT 不响应 OPTIONS 时可能误判离线
+  heartbeat:
+    enabled: false
+    interval_s: 30
+    timeout_s: 5
+    failures: 3
 
 alarm:
   number: "8000"

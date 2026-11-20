@@ -38,6 +38,8 @@ type Server struct {
 	alarms          *store.AlarmStore
 	alarmCfg        config.AlarmConfig
 	registrationCfg config.RegistrationConfig
+	hbMu            sync.Mutex
+	hbFailures      map[string]int
 	broadcastCfg    config.BroadcastConfig
 	mediaTranscode  bool
 	zones           []zone
@@ -96,10 +98,12 @@ func New(st *store.Store, auth *Authenticator, cdr *store.CDRStore, alarms *stor
 		ua: ua, srv: srv, client: client, dua: dua, store: st, auth: auth,
 		log: log, domain: opts.Domain, advertise: opts.Advertise, advertiseHost: advHost,
 		dataDir: opts.DataDir, cdr: cdr, alarms: alarms, alarmCfg: opts.Alarm,
-		broadcastCfg:   opts.Broadcast,
-		mediaTranscode: opts.Media.Transcode,
-		zones:          buildZones(opts.Zones, st),
-		ttsCfg:         opts.TTS,
+		registrationCfg: opts.Registration,
+		hbFailures:      map[string]int{},
+		broadcastCfg:    opts.Broadcast,
+		mediaTranscode:  opts.Media.Transcode,
+		zones:           buildZones(opts.Zones, st),
+		ttsCfg:          opts.TTS,
 		ttsClient: tts.NewFromConfig(tts.Config{
 			Provider: opts.TTS.Provider, BaseURL: opts.TTS.BaseURL, APIKey: opts.TTS.APIKey,
 			Model: opts.TTS.Model, VoiceZH: opts.TTS.VoiceZH, VoiceEN: opts.TTS.VoiceEN,
@@ -238,6 +242,7 @@ func (s *Server) onRegister(req *sip.Request, tx sip.ServerTransaction) {
 	}
 	if ttl <= 0 {
 		s.store.Unregister(ext)
+		s.resetHeartbeat(ext)
 		s.log.Info("unregistered", "ext", ext, "source", req.Source())
 		s.emit("device.unregistered", map[string]any{"ext": ext, "source": req.Source()})
 		res := sip.NewResponseFromRequest(req, 200, "OK", nil)
@@ -258,6 +263,7 @@ func (s *Server) onRegister(req *sip.Request, tx sip.ServerTransaction) {
 		s.respond(req, tx, 403, "Forbidden")
 		return
 	}
+	s.resetHeartbeat(ext)
 	s.log.Info("registered", "ext", ext, "contact", contact, "source", src, "ttl", ttl, "model", model, "firmware", firmware)
 	s.emit("device.registered", map[string]any{
 		"ext": ext, "contact": contact, "source": src, "model": model, "firmware": firmware,

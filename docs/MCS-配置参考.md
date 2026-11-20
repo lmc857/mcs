@@ -69,11 +69,20 @@ UDP 注册没有连接状态，断电/断网后只能等租期到期才会显示
 | --- | --- | --- |
 | `default_expires_s` | `300` | 设备未带 Expires 时使用的租期 |
 | `max_expires_s` | `300` | 服务器接受的最大租期；设备给更长时按此值返回 |
+| `heartbeat.enabled` | `false` | 启用 SIP OPTIONS 心跳，快速检测断电/离线 |
+| `heartbeat.interval_s` | `30` | 心跳间隔，最小 5 秒 |
+| `heartbeat.timeout_s` | `5` | 单次 OPTIONS 超时；不能大于间隔 |
+| `heartbeat.failures` | `3` | 连续失败次数，达到后标记离线，1-10 |
 
 ```yaml
 registration:
   default_expires_s: 300
   max_expires_s: 300
+  heartbeat:
+    enabled: true
+    interval_s: 30
+    timeout_s: 5
+    failures: 3
 ```
 
 设备应在租期内重新 REGISTER；超过租期后网页自动显示离线。

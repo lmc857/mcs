@@ -46,8 +46,16 @@ type AuthConfig struct {
 }
 
 type RegistrationConfig struct {
-	DefaultExpiresS int `yaml:"default_expires_s"`
-	MaxExpiresS     int `yaml:"max_expires_s"`
+	DefaultExpiresS int             `yaml:"default_expires_s"`
+	MaxExpiresS     int             `yaml:"max_expires_s"`
+	Heartbeat       HeartbeatConfig `yaml:"heartbeat"`
+}
+
+type HeartbeatConfig struct {
+	Enabled   bool `yaml:"enabled"`
+	IntervalS int  `yaml:"interval_s"`
+	TimeoutS  int  `yaml:"timeout_s"`
+	Failures  int  `yaml:"failures"`
 }
 
 type AlarmConfig struct {
@@ -162,6 +170,24 @@ func Load(path string) (Config, error) {
 	}
 	if cfg.Registration.DefaultExpiresS > cfg.Registration.MaxExpiresS {
 		cfg.Registration.DefaultExpiresS = cfg.Registration.MaxExpiresS
+	}
+	if cfg.Registration.Heartbeat.IntervalS <= 0 {
+		cfg.Registration.Heartbeat.IntervalS = 30
+	}
+	if cfg.Registration.Heartbeat.TimeoutS <= 0 {
+		cfg.Registration.Heartbeat.TimeoutS = 5
+	}
+	if cfg.Registration.Heartbeat.Failures <= 0 {
+		cfg.Registration.Heartbeat.Failures = 3
+	}
+	if cfg.Registration.Heartbeat.IntervalS < 5 {
+		cfg.Registration.Heartbeat.IntervalS = 5
+	}
+	if cfg.Registration.Heartbeat.TimeoutS > cfg.Registration.Heartbeat.IntervalS {
+		cfg.Registration.Heartbeat.TimeoutS = cfg.Registration.Heartbeat.IntervalS
+	}
+	if cfg.Registration.Heartbeat.Failures > 10 {
+		cfg.Registration.Heartbeat.Failures = 10
 	}
 	if cfg.Alarm.Number == "" {
 		cfg.Alarm.Number = "8000"

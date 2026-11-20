@@ -10,14 +10,18 @@ import (
 // ServerSettings are the allowlisted fields that can be edited from the
 // web console. They are persisted in SQLite and applied on process start.
 type ServerSettings struct {
-	Advertise   string `json:"advertise"`
-	SIPUDP      string `json:"sip_udp"`
-	HTTP        string `json:"http"`
-	HTTPS       string `json:"https"`
-	Domain      string `json:"domain"`
-	AlarmNumber string `json:"alarm_number"`
-	AutoAnswer  string `json:"auto_answer"`
-	Transcode   bool   `json:"transcode"`
+	Advertise          string `json:"advertise"`
+	SIPUDP             string `json:"sip_udp"`
+	HTTP               string `json:"http"`
+	HTTPS              string `json:"https"`
+	Domain             string `json:"domain"`
+	AlarmNumber        string `json:"alarm_number"`
+	AutoAnswer         string `json:"auto_answer"`
+	Transcode          bool   `json:"transcode"`
+	HeartbeatEnabled   bool   `json:"heartbeat_enabled"`
+	HeartbeatIntervalS int    `json:"heartbeat_interval_s"`
+	HeartbeatTimeoutS  int    `json:"heartbeat_timeout_s"`
+	HeartbeatFailures  int    `json:"heartbeat_failures"`
 }
 
 func (c Config) ServerSettings() ServerSettings {
@@ -45,6 +49,10 @@ func (c *Config) ApplyServerSettings(v ServerSettings) error {
 	c.Alarm.Number = v.AlarmNumber
 	c.Broadcast.AutoAnswer = v.AutoAnswer
 	c.Media.Transcode = v.Transcode
+	c.Registration.Heartbeat.Enabled = v.HeartbeatEnabled
+	c.Registration.Heartbeat.IntervalS = v.HeartbeatIntervalS
+	c.Registration.Heartbeat.TimeoutS = v.HeartbeatTimeoutS
+	c.Registration.Heartbeat.Failures = v.HeartbeatFailures
 	return nil
 }
 
@@ -74,6 +82,17 @@ func ValidateServerSettings(v ServerSettings) error {
 	}
 	if len(v.AutoAnswer) > 512 {
 		return fmt.Errorf("auto_answer 太长")
+	}
+	if v.HeartbeatEnabled {
+		if v.HeartbeatIntervalS < 5 || v.HeartbeatIntervalS > 3600 {
+			return fmt.Errorf("heartbeat_interval_s 必须在 5-3600")
+		}
+		if v.HeartbeatTimeoutS < 1 || v.HeartbeatTimeoutS > v.HeartbeatIntervalS {
+			return fmt.Errorf("heartbeat_timeout_s 必须在 1-间隔秒数")
+		}
+		if v.HeartbeatFailures < 1 || v.HeartbeatFailures > 10 {
+			return fmt.Errorf("heartbeat_failures 必须在 1-10")
+		}
 	}
 	if strings.ContainsAny(v.Domain, " \t\r\n") {
 		return fmt.Errorf("domain 不能包含空白字符")
