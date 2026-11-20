@@ -1,0 +1,634 @@
+openapi: 3.0.3
+info:
+  title: MCS API
+  version: 0.1.0-dev
+  description: |
+    MCS 报警/对讲/广播服务器当前实现接口。
+    启用控制台登录后，除登录、会话、健康检查外均需 Cookie 会话。
+    完整说明见 docs/MCS-API参考.md。
+servers:
+  - url: http://127.0.0.1:8080
+    description: 本机 HTTP
+  - url: https://127.0.0.1:8443
+    description: 本机 HTTPS
+tags:
+  - name: auth
+  - name: devices
+  - name: calls
+  - name: cdr
+  - name: alarms
+  - name: broadcast
+  - name: media
+  - name: webrtc
+  - name: system
+
+security:
+  - cookieAuth: []
+
+paths:
+  /api/v1/login:
+    post:
+      tags: [auth]
+      security: []
+      summary: 控制台登录
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/LoginRequest'}
+      responses:
+        '200': {description: 登录成功，Set-Cookie 写入会话}
+        '401': {description: 用户名或密码错误}
+  /api/v1/logout:
+    post:
+      tags: [auth]
+      security: []
+      summary: 退出登录
+      responses:
+        '200': {description: 已退出}
+  /api/v1/session:
+    get:
+      tags: [auth]
+      security: []
+      summary: 当前会话状态
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Session'}
+  /api/v1/healthz:
+    get:
+      tags: [system]
+      security: []
+      summary: 健康检查
+      responses:
+        '200': {description: OK}
+  /api/v1/system/info:
+    get:
+      tags: [system]
+      summary: 系统信息
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  name: {type: string}
+                  version: {type: string}
+                  uptime_s: {type: integer}
+                  devices: {type: integer}
+                  online: {type: integer}
+                  transcode: {type: boolean}
+
+  /api/v1/tts/config:
+    get:
+      tags: [system]
+      summary: 读取 TTS 配置（不含 API Key）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/TTSConfig'}
+    put:
+      tags: [system]
+      summary: 保存 TTS 配置（立即生效）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/TTSConfigUpdate'}
+      responses:
+        '200': {description: 已保存}
+        '400': {description: 参数错误}
+  /api/v1/tts/test:
+    post:
+      tags: [system]
+      summary: 测试当前 TTS 配置
+      responses:
+        '200': {description: 成功, content: {application/json: {schema: {type: object, properties: {status: {type: string}, bytes: {type: integer}}}}}}
+        '502': {description: TTS 调用失败}
+
+  /api/v1/devices:
+    get:
+      tags: [devices]
+      summary: 设备列表
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items: {type: array, items: {$ref: '#/components/schemas/Device'}}
+                  total: {type: integer}
+                  online: {type: integer}
+    post:
+      tags: [devices]
+      summary: 新增设备
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/DeviceCreate'}
+      responses:
+        '201': {description: 已创建, content: {application/json: {schema: {$ref: '#/components/schemas/Device'}}}}
+        '400': {description: 参数错误}
+  /api/v1/devices/{ext}:
+    parameters:
+      - {name: ext, in: path, required: true, schema: {type: string}}
+    patch:
+      tags: [devices]
+      summary: 修改设备
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/DeviceUpdate'}
+      responses:
+        '200': {description: 已更新, content: {application/json: {schema: {$ref: '#/components/schemas/Device'}}}}
+        '404': {description: 不存在}
+    delete:
+      tags: [devices]
+      summary: 删除设备
+      responses:
+        '200': {description: 已删除}
+        '404': {description: 不存在}
+  /api/v1/devices/{ext}/snapshot:
+    get:
+      tags: [devices]
+      summary: 代理设备 HTTP 抓拍
+      parameters:
+        - {name: ext, in: path, required: true, schema: {type: string}}
+      responses:
+        '200': {description: 图片, content: {image/*: {schema: {type: string, format: binary}}}}
+        '404': {description: 设备或快照地址不存在}
+        '502': {description: 设备抓拍失败}
+
+  /api/v1/calls/active:
+    get:
+      tags: [calls]
+      summary: 活动通话
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items: {type: array, items: {$ref: '#/components/schemas/Call'}}
+                  total: {type: integer}
+  /api/v1/intercom/{call_id}/unlock:
+    post:
+      tags: [calls]
+      summary: 发送 DTMF 开锁
+      parameters:
+        - {name: call_id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties: {code: {type: string, default: '#'}}
+      responses:
+        '200': {description: 已发送}
+        '409': {description: 通话未接通或设备拒绝}
+
+  /api/v1/cdr:
+    get:
+      tags: [cdr]
+      summary: 话单
+      parameters:
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 500, default: 50}}
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items: {type: array, items: {$ref: '#/components/schemas/CDR'}}
+                  total: {type: integer}
+
+  /api/v1/alarms:
+    get:
+      tags: [alarms]
+      summary: 报警事件
+      parameters:
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 500, default: 50}}
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items: {type: array, items: {$ref: '#/components/schemas/Alarm'}}
+                  total: {type: integer}
+  /api/v1/alarms/{id}:
+    get:
+      tags: [alarms]
+      summary: 单条报警
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Alarm'}}}}
+        '404': {description: 不存在}
+  /api/v1/alarms/{id}/close:
+    post:
+      tags: [alarms]
+      summary: 处置关闭报警
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                disposition: {type: string}
+                note: {type: string}
+      responses:
+        '200': {description: 已关闭, content: {application/json: {schema: {$ref: '#/components/schemas/Alarm'}}}}
+        '404': {description: 不存在}
+  /api/v1/alarm/test:
+    post:
+      tags: [alarms]
+      summary: 模拟测试报警
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties: {from: {type: string}, to: {type: string}}
+      responses:
+        '202': {description: 已接受}
+
+  /api/v1/broadcast/zones:
+    get:
+      tags: [broadcast]
+      summary: 广播分区
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items: {type: array, items: {$ref: '#/components/schemas/Zone'}}
+                  total: {type: integer}
+  /api/v1/broadcast/active:
+    get:
+      tags: [broadcast]
+      summary: 活动广播
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {type: object, properties: {items: {type: array, items: {$ref: '#/components/schemas/Broadcast'}}, total: {type: integer}}}}}}
+  /api/v1/broadcast/sessions:
+    get:
+      tags: [broadcast]
+      summary: 广播会话历史
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {type: object, properties: {items: {type: array, items: {$ref: '#/components/schemas/Broadcast'}}, total: {type: integer}}}}}}
+  /api/v1/broadcast/start:
+    post:
+      tags: [broadcast]
+      summary: 开始 TTS/音频广播
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/BroadcastRequest'}
+      responses:
+        '202': {description: 已开始, content: {application/json: {schema: {$ref: '#/components/schemas/Broadcast'}}}}
+        '409': {description: 分区被更高优先级占用}
+        '503': {description: 无在线终端}
+        '502': {description: TTS 或媒体失败}
+  /api/v1/broadcast/stop:
+    post:
+      tags: [broadcast]
+      summary: 停止分区广播
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {type: object, required: [zone_id], properties: {zone_id: {type: string}}}
+      responses:
+        '200': {description: 已停止, content: {application/json: {schema: {$ref: '#/components/schemas/Broadcast'}}}}
+        '404': {description: 分区无活动广播}
+
+  /api/v1/broadcast/schedules:
+    get:
+      tags: [broadcast]
+      summary: 定时任务列表
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {type: object, properties: {items: {type: array, items: {$ref: '#/components/schemas/Schedule'}}, total: {type: integer}}}}}}
+    post:
+      tags: [broadcast]
+      summary: 新增定时任务
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ScheduleCreate'}
+      responses:
+        '201': {description: 已创建, content: {application/json: {schema: {$ref: '#/components/schemas/Schedule'}}}}
+        '400': {description: cron/分区/内容错误}
+  /api/v1/broadcast/schedules/{id}:
+    parameters:
+      - {name: id, in: path, required: true, schema: {type: string}}
+    patch:
+      tags: [broadcast]
+      summary: 修改/启停定时任务
+      requestBody:
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/SchedulePatch'}
+      responses:
+        '200': {description: 已更新, content: {application/json: {schema: {$ref: '#/components/schemas/Schedule'}}}}
+        '404': {description: 不存在}
+    delete:
+      tags: [broadcast]
+      summary: 删除定时任务
+      responses:
+        '200': {description: 已删除}
+        '404': {description: 不存在}
+
+  /api/v1/media:
+    get:
+      tags: [media]
+      summary: 音频库
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {type: object, properties: {items: {type: array, items: {$ref: '#/components/schemas/MediaItem'}}, total: {type: integer}}}}}}
+    post:
+      tags: [media]
+      summary: 上传 WAV
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: {type: string, format: binary}
+                name: {type: string}
+      responses:
+        '201': {description: 已上传, content: {application/json: {schema: {$ref: '#/components/schemas/MediaItem'}}}}
+        '413': {description: 超过 20MB}
+  /api/v1/media/{id}:
+    delete:
+      tags: [media]
+      summary: 删除音频
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      responses:
+        '200': {description: 已删除}
+        '404': {description: 不存在}
+  /api/v1/media/{id}/download:
+    get:
+      tags: [media]
+      summary: 下载音频
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      responses:
+        '200': {description: WAV, content: {audio/wav: {schema: {type: string, format: binary}}}}
+        '404': {description: 不存在}
+
+  /api/v1/webrtc/offer:
+    post:
+      tags: [webrtc]
+      summary: 浏览器 WebRTC 音视频 offer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/WebRTCOffer'}
+      responses:
+        '200':
+          description: answer
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  type: {type: string, example: answer}
+                  sdp: {type: string}
+        '409': {description: 呼叫无视频或 WebRTC 建立失败}
+
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: mcs_session
+
+  schemas:
+    LoginRequest:
+      type: object
+      required: [username, password]
+      properties:
+        username: {type: string}
+        password: {type: string, format: password}
+    Session:
+      type: object
+      properties:
+        auth_required: {type: boolean}
+        logged_in: {type: boolean}
+        user: {type: string}
+    Device:
+      type: object
+      properties:
+        ext: {type: string}
+        name: {type: string}
+        zone: {type: string}
+        online: {type: boolean}
+        contact: {type: string}
+        source: {type: string}
+        user_agent: {type: string}
+        model: {type: string}
+        firmware: {type: string}
+        snapshot: {type: string}
+        enabled: {type: boolean}
+        expires_at: {type: string}
+        last_seen: {type: string}
+    DeviceCreate:
+      type: object
+      required: [ext, name, password]
+      properties:
+        ext: {type: string}
+        name: {type: string}
+        password: {type: string}
+        zone: {type: string}
+        snapshot: {type: string}
+    DeviceUpdate:
+      type: object
+      properties:
+        name: {type: string}
+        password: {type: string}
+        zone: {type: string}
+        snapshot: {type: string}
+    Call:
+      type: object
+      properties:
+        call_id: {type: string}
+        from: {type: string}
+        to: {type: string}
+        state: {type: string, enum: [ringing, answered]}
+        started_at: {type: string}
+        video: {type: boolean}
+    CDR:
+      type: object
+      properties:
+        id: {type: string}
+        call_id: {type: string}
+        from: {type: string}
+        to: {type: string}
+        device_id: {type: string}
+        start_at: {type: string}
+        answer_at: {type: string}
+        end_at: {type: string}
+        duration_s: {type: integer}
+        result: {type: string}
+        recording: {type: string}
+    Alarm:
+      type: object
+      properties:
+        id: {type: string}
+        call_id: {type: string}
+        from: {type: string}
+        to: {type: string}
+        alarm_number: {type: string}
+        device_name: {type: string}
+        zone: {type: string}
+        state: {type: string}
+        level: {type: integer}
+        level_name: {type: string}
+        answered_by: {type: string}
+        started_at: {type: string}
+        answered_at: {type: string}
+        ended_at: {type: string}
+        closed_at: {type: string}
+        disposition: {type: string}
+        note: {type: string}
+        recording: {type: string}
+        test: {type: boolean}
+    Zone:
+      type: object
+      properties:
+        id: {type: string}
+        name: {type: string}
+        dial: {type: string}
+        codec: {type: string, enum: [pcmu, opus]}
+        mode: {type: string}
+        multicast: {type: string}
+        members: {type: array, items: {type: string}}
+        online: {type: integer}
+    Broadcast:
+      type: object
+      properties:
+        id: {type: string}
+        zone_id: {type: string}
+        zone_name: {type: string}
+        state: {type: string}
+        source: {type: string}
+        codec: {type: string, enum: [pcmu, opus]}
+        priority: {type: integer}
+        text: {type: string}
+        voice: {type: string}
+        started_at: {type: string}
+        finished_at: {type: string}
+        total: {type: integer}
+        delivered: {type: integer}
+        active: {type: integer}
+        failed: {type: integer}
+        error: {type: string}
+    BroadcastRequest:
+      type: object
+      required: [zone_id]
+      properties:
+        zone_id: {type: string}
+        text: {type: string}
+        voice: {type: string}
+        media_id: {type: string}
+        priority: {type: integer, minimum: 0, maximum: 4}
+    Schedule:
+      type: object
+      properties:
+        id: {type: string}
+        name: {type: string}
+        zone_id: {type: string}
+        text: {type: string}
+        voice: {type: string}
+        media_id: {type: string}
+        priority: {type: integer}
+        cron: {type: string}
+        enabled: {type: boolean}
+        last_run: {type: string}
+        next_run: {type: string}
+        created_at: {type: string}
+    ScheduleCreate:
+      type: object
+      required: [zone_id, cron]
+      properties:
+        name: {type: string}
+        zone_id: {type: string}
+        cron: {type: string, example: '0 8 * * 1-5'}
+        text: {type: string}
+        voice: {type: string}
+        media_id: {type: string}
+        priority: {type: integer}
+        enabled: {type: boolean, default: true}
+    SchedulePatch:
+      type: object
+      properties:
+        name: {type: string}
+        text: {type: string}
+        voice: {type: string}
+        media_id: {type: string}
+        priority: {type: integer}
+        cron: {type: string}
+        enabled: {type: boolean}
+    TTSConfig:
+      type: object
+      properties:
+        provider: {type: string, enum: [openai, minimax]}
+        base_url: {type: string}
+        model: {type: string}
+        voice_zh: {type: string}
+        voice_en: {type: string}
+        timeout_s: {type: integer}
+        has_api_key: {type: boolean}
+    TTSConfigUpdate:
+      type: object
+      properties:
+        provider: {type: string, enum: [openai, minimax]}
+        base_url: {type: string}
+        model: {type: string}
+        voice_zh: {type: string}
+        voice_en: {type: string}
+        timeout_s: {type: integer}
+        api_key: {type: string}
+        clear_api_key: {type: boolean}
+    MediaItem:
+      type: object
+      properties:
+        id: {type: string}
+        name: {type: string}
+        format: {type: string, enum: [wav, mp3]}
+        size: {type: integer}
+        duration_ms: {type: integer}
+        created_at: {type: string}
+    WebRTCOffer:
+      type: object
+      required: [call_id, sdp]
+      properties:
+        call_id: {type: string}
+        sdp: {type: string}

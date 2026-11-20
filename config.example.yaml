@@ -1,0 +1,97 @@
+# MCS 配置（当前实现）
+server:
+  # SIP 监听地址；生产用 0.0.0.0:5060
+  sip_udp: "0.0.0.0:5060"
+  # 可选 SIP over TLS；证书/私钥用 PEM
+  # sip_tls: "0.0.0.0:5061"
+  # tls_cert: "/etc/mcs/tls/server.crt"
+  # tls_key: "/etc/mcs/tls/server.key"
+  # 管理/调度台 HTTP 地址；生产建议 0.0.0.0:8080 + 反向代理 HTTPS
+  http: "127.0.0.1:8080"
+  # 可选 HTTPS 控制台；证书为空时复用 tls_cert/tls_key
+  # https: "0.0.0.0:8443"
+  # https_cert: "/etc/mcs/tls/console.crt"
+  # https_key: "/etc/mcs/tls/console.key"
+  domain: "mcs.local"
+  # 设备能访问到的 MCS 地址（写进 B 腿 Contact / SDP）。
+  # 本机软电话演示用 127.0.0.1；局域网真机改成服务器 LAN IP，例如 192.168.1.10:5060。
+  advertise: "127.0.0.1:5060"
+
+storage:
+  # 录音、后续数据库/证书都放这里
+  data_dir: "./data"
+
+auth:
+  realm: "mcs"
+  # 生产务必修改；留空则每次启动随机生成
+  secret: "change-me-please"
+  console_user: "admin"
+  console_password: ""   # 非空则启用控制台登录（Cookie 会话）
+
+# 报警策略：8000 按级别顺序振铃，超时自动升级
+alarm:
+  number: "8000"
+  levels:
+    - name: "值班员"
+      members: ["1001"]
+      timeout_s: 15
+    - name: "备勤"
+      members: ["1003"]
+      timeout_s: 20
+
+media:
+  # 默认 false：按 SDP 协商结果透传，不做服务器转码。
+  # 只有混合厂商设备确实无法协商同一 G.711 编码时，才临时改为 true。
+  transcode: false
+
+broadcast:
+  # 广播 INVITE 携带的自动应答头（自研终端按此实现）
+  auto_answer: "<http://127.0.0.1>;info=alert-autoanswer"
+  invite_timeout_s: 5
+  max_concurrency: 16
+
+# TTS：openai = OpenAI/千问/本地 Kokoro 等 OpenAI 兼容接口；minimax = MiniMax
+tts:
+  provider: "openai"
+  base_url: "http://127.0.0.1:8399"
+  api_key: ""
+  model: ""
+  voice_zh: "zf_001"
+  voice_en: "af_heart"
+  timeout_s: 30
+
+# 广播分区；members 省略时表示全部设备
+zones:
+  - id: "a"
+    name: "A 区（单播）"
+    dial: "5001"          # 话机拨 5001 直接对 A 区实时寻呼
+    # codec: "pcmu"       # 广播编码：pcmu（默认）或 opus
+    members: ["1001", "1002", "1003", "1004"]
+    mode: "unicast"
+  - id: "all"
+    name: "全区（组播）"
+    dial: "5002"
+    members: ["1001", "1002", "1003", "1004"]
+    mode: "multicast"
+    multicast: "239.255.10.1:5004"
+
+# 设备仅在数据库 devices 表为空时从本文件导入；之后以 Web 控制台/SQLite 为准
+devices:
+  - ext: "1001"
+    name: "值班室"
+    password: "pass-1001"
+    zone: "A 区"
+  - ext: "1002"
+    name: "3 号楼东侧报警柱"
+    password: "pass-1002"
+    zone: "A 区"
+  - ext: "1003"
+    name: "东门门口机"
+    password: "pass-1003"
+    zone: "东门"
+    # 设备 HTTP 抓拍地址，供调度台“抓拍”使用
+    # snapshot: "http://192.168.1.60/snapshot.jpg"
+  - ext: "1004"
+    name: "教学楼音箱"
+    password: "pass-1004"
+    zone: "A 区"

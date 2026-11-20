@@ -1,0 +1,25 @@
+[Unit]
+Description=MCS alarm / intercom / broadcast server
+Documentation=https://example.invalid/mcs
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=mcs
+Group=mcs
+WorkingDirectory=/var/lib/mcs
+ExecStart=/opt/mcs/mcs -config /etc/mcs/config.yaml
+Restart=on-failure
+RestartSec=3
+LimitNOFILE=65535
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/mcs
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+
+[Install]
+WantedBy=multi-user.target

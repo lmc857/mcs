@@ -1,0 +1,1089 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MCS · 报警对讲广播</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232563eb'/%3E%3Ctext x='16' y='22' font-size='18' text-anchor='middle' fill='white' font-family='Arial' font-weight='bold'%3EM%3C/text%3E%3C/svg%3E">
+<style>
+:root{
+  --bg:#f3f6fb; --surface:#ffffff; --surface-2:#f8fafc; --text:#162033; --muted:#6b7a90;
+  --line:#e3e9f2; --brand:#2563eb; --brand-2:#1d4ed8; --brand-soft:#eef4ff;
+  --ok:#16a34a; --warn:#d97706; --danger:#dc2626; --shadow:0 1px 2px rgba(15,23,42,.04),0 8px 24px rgba(15,23,42,.04);
+}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%}
+body{background:var(--bg);color:var(--text);font:14px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif}
+button,input,select,textarea{font:inherit}
+a{color:var(--brand);text-decoration:none}
+a:hover{text-decoration:underline}
+h1,h2,h3,p{margin:0}
+[hidden]{display:none!important}
+
+.shell{display:grid;grid-template-columns:232px minmax(0,1fr);min-height:100vh}
+.sidebar{background:var(--surface);border-right:1px solid var(--line);display:flex;flex-direction:column;position:sticky;top:0;height:100vh}
+.brand{display:flex;align-items:center;gap:11px;padding:20px 18px 18px}
+.brand-mark{width:34px;height:34px;border-radius:9px;background:var(--brand);color:#fff;display:grid;place-items:center;font-weight:800;font-size:16px;letter-spacing:.5px}
+.brand strong{display:block;font-size:16px;line-height:1.2}
+.brand span{display:block;color:var(--muted);font-size:11px;margin-top:2px}
+nav{padding:4px 10px;overflow:auto;flex:1}
+.nav-group{color:#9aa8bb;font-size:11px;letter-spacing:.08em;text-transform:uppercase;margin:14px 10px 6px}
+.nav-item{width:100%;display:flex;align-items:center;gap:9px;border:0;background:transparent;color:#46556d;padding:9px 10px;border-radius:8px;cursor:pointer;text-align:left;font-size:13.5px}
+.nav-item:hover{background:var(--surface-2)}
+.nav-item.active{background:var(--brand-soft);color:var(--brand-2);font-weight:600}
+.nav-dot{width:7px;height:7px;border-radius:50%;background:#cbd5e1;flex:0 0 auto}
+.nav-item.active .nav-dot{background:var(--brand)}
+.nav-badge{margin-left:auto;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:#fee2e2;color:#b91c1c;font-size:11px;display:grid;place-items:center;font-weight:700}
+.nav-badge:empty{display:none}
+.sidebar-foot{border-top:1px solid var(--line);padding:12px 18px;color:#9aa8bb;font-size:11px}
+.mobile-nav{display:none;margin:0 14px 12px;width:calc(100% - 28px);background:#fff}
+.main{min-width:0;display:flex;flex-direction:column}
+.topbar{height:72px;background:rgba(255,255,255,.92);backdrop-filter:blur(10px);border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;padding:0 28px;position:sticky;top:0;z-index:20;gap:12px}
+.topbar h1{font-size:19px;font-weight:700;letter-spacing:-.01em}
+.topbar .sub{color:var(--muted);font-size:12px;margin-top:2px}
+.top-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.live{display:flex;align-items:center;gap:7px;color:var(--muted);font-size:12px}
+.pulse{width:7px;height:7px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 3px rgba(22,163,74,.12)}
+.content{padding:24px 28px 40px;max-width:1500px;width:100%;margin:0 auto}
+.tab-panel{display:none}
+.tab-panel.active{display:block;animation:fade .18s ease}
+@keyframes fade{from{opacity:.4;transform:translateY(2px)}to{opacity:1;transform:none}}
+
+.cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:18px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px 17px;box-shadow:var(--shadow)}
+.card .k{color:var(--muted);font-size:12px;display:flex;align-items:center;justify-content:space-between}
+.card .v{font-size:28px;font-weight:700;letter-spacing:-.02em;margin-top:6px;line-height:1.1}
+.card .v.ok{color:var(--ok)}
+.card .v.warn{color:var(--warn)}
+.sub{color:var(--muted);font-size:12px}
+.grid-2{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,.75fr);gap:16px}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);margin-bottom:16px;overflow:hidden}
+.panel-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 17px;border-bottom:1px solid var(--line);background:linear-gradient(180deg,#fff,#fbfcff)}
+.panel-head h2{font-size:14px;font-weight:700}
+.panel-head .hint{color:var(--muted);font-size:12px;font-weight:400}
+.panel-body{padding:16px 17px}
+.empty{text-align:center;color:#93a1b5;padding:26px 12px!important;font-size:13px}
+table{width:100%;border-collapse:collapse}
+th,td{padding:10px 12px;text-align:left;border-bottom:1px solid #eef2f7;vertical-align:middle;font-size:13px}
+th{color:#7b8aa0;font-size:11.5px;font-weight:600;background:#fbfcfe;letter-spacing:.02em;white-space:nowrap}
+tr:last-child td{border-bottom:0}
+tbody tr:hover{background:#fafcff}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px}
+.ext{font-weight:700;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13px}
+.badge{color:#5b6b82;font-size:11.5px;background:#f1f5f9;border-radius:6px;padding:2px 6px;white-space:nowrap}
+.dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:6px;vertical-align:1px}
+.dot.on{background:var(--ok)} .dot.off{background:#b8c3d3}
+.alert{border:1px solid #fecaca;background:#fff1f2;color:#b91c1c;border-radius:9px;padding:10px 12px;margin-bottom:14px;font-size:13px}
+.hint{color:var(--muted);font-size:12px}
+
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:5px;border:1px solid var(--line);background:#fff;color:#344256;border-radius:8px;padding:8px 12px;cursor:pointer;font-size:13px;white-space:nowrap}
+.btn:hover{border-color:#cbd7e8;background:#f8fbff}
+.btn-primary{background:var(--brand);border-color:var(--brand);color:#fff}
+.btn-primary:hover{background:var(--brand-2);border-color:var(--brand-2)}
+.btn-danger{background:#fff;border-color:#fecaca;color:#b91c1c}
+.btn-danger:hover{background:#fff5f5}
+.btn-sm{padding:4px 8px;font-size:12px}
+.test-btn{display:inline-flex;align-items:center;gap:4px;border:1px solid var(--line);background:#fff;color:#344256;border-radius:7px;padding:5px 9px;cursor:pointer;font-size:12px}
+.test-btn:hover{background:#f8fbff;border-color:#cbd7e8}
+.link{font-size:12px;margin-right:6px}
+
+.form{display:flex;gap:9px;flex-wrap:wrap;align-items:center;padding:0 17px 14px}
+.form.stacked{align-items:stretch;flex-direction:column}
+.form.stacked input,.form.stacked button{flex:0 0 auto;width:100%}
+input[type=text],input[type=password],select,textarea{background:#fff;border:1px solid #d9e2ef;color:var(--text);border-radius:8px;padding:8px 10px;font-size:13px;outline:none;min-height:36px}
+input[type=text]:focus,input[type=password]:focus,select:focus,textarea:focus{border-color:#93b4f7;box-shadow:0 0 0 3px #eaf1ff}
+textarea{width:100%;min-height:84px;resize:vertical;line-height:1.6}
+.form input[type=text],.form input[type=password]{flex:0 1 150px}
+.form .wide{flex:1 1 260px}
+.form-note{color:var(--muted);font-size:12px;padding:0 17px 14px}
+textarea.bc-text{margin:0 17px 12px;width:calc(100% - 34px)}
+.quick{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.quick .btn{justify-content:flex-start;padding:13px 14px;font-size:13px}
+.kv{display:grid;grid-template-columns:120px minmax(0,1fr);gap:8px 12px;font-size:13px}
+.kv dt{color:var(--muted)} .kv dd{margin:0;font-weight:600}
+.section-title{font-size:13px;font-weight:700;margin:2px 0 10px}
+.section-desc{color:var(--muted);font-size:12px;margin:-4px 0 12px}
+.stat-inline{display:flex;gap:18px;flex-wrap:wrap;color:var(--muted);font-size:12px}
+.stat-inline strong{color:var(--text);font-size:15px;margin-left:4px}
+
+.modal{position:fixed;inset:0;background:rgba(15,23,42,.42);display:grid;place-items:center;z-index:80;padding:18px}
+.modal-card{background:#fff;border:1px solid var(--line);border-radius:14px;box-shadow:0 24px 70px rgba(15,23,42,.22);width:min(760px,94vw);padding:16px;max-height:92vh;overflow:auto}
+.modal-card.login{width:min(380px,94vw);padding:20px}
+.modal-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
+.login h2{font-size:17px;margin-bottom:4px}
+.login .desc{color:var(--muted);font-size:12px;margin-bottom:14px}
+#video-el{width:100%;aspect-ratio:16/9;background:#000;border-radius:9px;display:block}
+.alarm-banner{position:fixed;left:50%;top:16px;transform:translateX(-50%);z-index:90;background:#fff1f2;border:1px solid #fecaca;color:#991b1b;border-radius:11px;padding:10px 14px;display:flex;align-items:center;gap:16px;box-shadow:0 12px 30px rgba(153,27,27,.16);font-size:13px;max-width:min(760px,94vw)}
+.alarm-banner button{border:1px solid #fecaca;background:#fff;color:#991b1b;border-radius:7px;padding:4px 9px;cursor:pointer}
+.two-col{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.settings-block{max-width:1100px}
+@media (max-width:1000px){
+  .shell{grid-template-columns:1fr}
+  .sidebar{position:static;height:auto;border-right:0;border-bottom:1px solid var(--line)}
+  .brand{padding:14px 16px}
+  nav{display:none}
+  .mobile-nav{display:block}
+  .nav-group{display:none}
+  .nav-item{width:auto;flex:0 0 auto;padding:7px 10px;white-space:nowrap}
+  .sidebar-foot{display:none}
+  .topbar{padding:0 16px;height:auto;min-height:64px}
+  .content{padding:16px}
+  .cards{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .grid-2,.two-col{grid-template-columns:1fr}
+}
+@media (max-width:560px){
+  .cards{grid-template-columns:1fr}
+  .topbar{align-items:flex-start;flex-direction:column;padding-top:12px;padding-bottom:12px}
+  .top-actions{width:100%}
+  .panel{overflow-x:auto}
+  table{min-width:620px}
+}
+</style>
+</head>
+<body>
+<div id="login-modal" class="modal" hidden>
+  <div class="modal-card login">
+    <h2>登录 MCS</h2>
+    <div class="desc">输入控制台账号继续</div>
+    <div class="form stacked">
+      <input type="text" id="login-user" placeholder="用户名" value="admin" autocomplete="username">
+      <input type="password" id="login-pass" placeholder="密码" autocomplete="current-password" onkeydown="if(event.key==='Enter') doLogin()">
+      <button class="btn btn-primary" onclick="doLogin()">登录</button>
+      <span class="hint" id="login-msg"></span>
+    </div>
+  </div>
+</div>
+
+<div id="video-modal" class="modal" hidden>
+  <div class="modal-card">
+    <div class="modal-head"><strong>实时视频</strong><button class="btn btn-sm" onclick="closeVideo()">关闭</button></div>
+    <video id="video-el" autoplay playsinline controls></video>
+  </div>
+</div>
+
+<div id="alarm-banner" class="alarm-banner" hidden>
+  <div><strong>报警</strong> <span id="alarm-text"></span></div>
+  <button onclick="hideAlarm()">关闭</button>
+</div>
+
+<div class="shell">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark">M</div>
+      <div><strong>MCS</strong><span>报警 · 对讲 · 广播</span></div>
+    </div>
+    <select class="mobile-nav" id="mobile-nav" onchange="showTab(this.value)" aria-label="页面">
+      <option value="overview">业务 · 总览</option>
+      <option value="alarms">业务 · 报警</option>
+      <option value="calls">业务 · 通话与对讲</option>
+      <option value="broadcast">业务 · 广播</option>
+      <option value="devices">配置 · 设备管理</option>
+      <option value="media">配置 · 音频库</option>
+      <option value="schedules">配置 · 定时任务</option>
+      <option value="tts">配置 · TTS 设置</option>
+      <option value="system">配置 · 系统信息</option>
+    </select>
+    <nav>
+      <div class="nav-group">业务</div>
+      <button class="nav-item active" data-tab="overview" onclick="showTab('overview')">总览</button>
+      <button class="nav-item" data-tab="alarms" onclick="showTab('alarms')">报警<span class="nav-badge" id="nav-alarms"></span></button>
+      <button class="nav-item" data-tab="calls" onclick="showTab('calls')">通话与对讲<span class="nav-badge" id="nav-calls"></span></button>
+      <button class="nav-item" data-tab="broadcast" onclick="showTab('broadcast')">广播</button>
+      <div class="nav-group">配置</div>
+      <button class="nav-item" data-tab="devices" onclick="showTab('devices')">设备管理</button>
+      <button class="nav-item" data-tab="media" onclick="showTab('media')">音频库</button>
+      <button class="nav-item" data-tab="schedules" onclick="showTab('schedules')">定时任务</button>
+      <button class="nav-item" data-tab="tts" onclick="showTab('tts')">TTS 设置</button>
+      <button class="nav-item" data-tab="system" onclick="showTab('system')">系统信息</button>
+    </nav>
+    <div class="sidebar-foot">MCS 0.1 · 私有化通信服务器</div>
+  </aside>
+
+  <div class="main">
+    <header class="topbar">
+      <div>
+        <h1 id="page-title">总览</h1>
+        <div class="sub" id="page-sub">常用操作与运行概况</div>
+      </div>
+      <div class="top-actions">
+        <button class="btn btn-sm" onclick="testAlarm()">测试报警</button>
+        <span class="live"><span class="pulse"></span><span id="updated">等待数据…</span></span>
+        <button id="logout-btn" class="btn btn-sm" onclick="doLogout()" hidden>退出</button>
+      </div>
+    </header>
+
+    <main class="content">
+      <div id="err" class="alert" style="display:none"></div>
+
+      <section id="tab-overview" class="tab-panel active">
+        <div class="cards">
+          <div class="card"><div class="k">设备总数</div><div class="v" id="total">–</div></div>
+          <div class="card"><div class="k">在线设备 <span class="badge" id="rate">–</span></div><div class="v ok" id="online">–</div></div>
+          <div class="card"><div class="k">活动通话</div><div class="v" id="active">–</div></div>
+          <div class="card"><div class="k">待处置报警</div><div class="v warn" id="pending">–</div></div>
+        </div>
+        <div class="grid-2">
+          <div class="panel">
+            <div class="panel-head"><h2>快捷操作</h2><span class="hint">最常用的入口</span></div>
+            <div class="panel-body quick">
+              <button class="btn" onclick="showTab('alarms')">查看报警并处置</button>
+              <button class="btn" onclick="showTab('calls')">查看活动通话</button>
+              <button class="btn" onclick="showTab('broadcast')">发起 TTS 广播</button>
+              <button class="btn" onclick="showTab('devices')">添加 / 管理设备</button>
+            </div>
+          </div>
+          <div class="panel">
+            <div class="panel-head"><h2>运行状态</h2><span class="hint">自动刷新</span></div>
+            <div class="panel-body">
+              <dl class="kv">
+                <dt>版本</dt><dd id="ov-version">—</dd>
+                <dt>运行时长</dt><dd id="ov-uptime">—</dd>
+                <dt>设备</dt><dd><span id="ov-devices">—</span> 台，在线 <span id="ov-online">—</span></dd>
+              </dl>
+              <div class="stat-inline" style="margin-top:14px">
+                <span>报警处置<strong id="ov-pending">—</strong></span>
+                <span>TTS<strong id="ov-tts">本机</strong></span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h2>使用提示</h2></div>
+          <div class="panel-body section-desc" style="margin:0">
+            值班员日常只需使用“报警”“通话与对讲”“广播”三个页面；设备、音频库、定时任务和系统信息收在“配置”分组，避免误操作。
+          </div>
+        </div>
+      </section>
+
+      <section id="tab-alarms" class="tab-panel">
+        <div class="panel">
+          <div class="panel-head"><h2>报警事件</h2><span class="hint">最新 20 条 · 可直接处置</span></div>
+          <table>
+            <thead><tr><th>时间</th><th>来源</th><th>设备 / 区域</th><th>级别</th><th>状态</th><th>操作</th></tr></thead>
+            <tbody id="alarms-body"><tr><td colspan="6" class="empty">还没有报警</td></tr></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="tab-calls" class="tab-panel">
+        <div class="panel">
+          <div class="panel-head"><h2>活动通话</h2><span class="hint">视频、开锁、抓拍都在这里</span></div>
+          <table>
+            <thead><tr><th>主叫</th><th>被叫</th><th>状态</th><th>开始时间</th><th>操作</th></tr></thead>
+            <tbody id="calls-body"><tr><td colspan="5" class="empty">当前没有通话</td></tr></tbody>
+          </table>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h2>最近通话</h2><span class="hint">录音可在线播放</span></div>
+          <table>
+            <thead><tr><th>时间</th><th>主叫</th><th>被叫</th><th>结果</th><th>时长</th><th>录音</th></tr></thead>
+            <tbody id="cdr-body"><tr><td colspan="6" class="empty">还没有话单</td></tr></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="tab-broadcast" class="tab-panel">
+        <div class="panel">
+          <div class="panel-head"><h2>发起广播</h2><span class="hint">TTS 或音频库 · 分区自动应答</span></div>
+          <div class="form">
+            <select id="bc-zone"></select>
+            <select id="bc-priority">
+              <option value="2">实时广播</option>
+              <option value="0">紧急广播</option>
+              <option value="3" selected>通知 / 定时</option>
+              <option value="4">背景音乐</option>
+            </select>
+            <select id="bc-media"><option value="">音频库</option></select>
+          </div>
+          <textarea id="bc-text" class="bc-text" placeholder="输入要播报的文本，例如：请各班注意，现在进行消防演练。"></textarea>
+          <div class="form" style="padding-top:0">
+            <button class="btn btn-primary" onclick="startBroadcast()">TTS 广播</button>
+            <button class="btn" onclick="startMediaBroadcast()">播放音频</button>
+            <button class="btn btn-danger" onclick="stopBroadcast()">停止</button>
+            <span class="hint" id="bc-msg"></span>
+          </div>
+          <div class="form-note">定时任务在“配置 → 定时任务”中管理；音频文件在“配置 → 音频库”上传。</div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h2>活动广播</h2><span class="hint">状态与投递结果</span></div>
+          <table>
+            <thead><tr><th>分区</th><th>状态</th><th>投递</th><th>内容</th><th>开始时间</th></tr></thead>
+            <tbody id="bc-body"><tr><td colspan="5" class="empty">当前没有广播</td></tr></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="tab-devices" class="tab-panel">
+        <div class="panel">
+          <div class="panel-head"><h2>添加设备</h2><span class="hint">写入 SQLite，重启保留</span></div>
+          <div class="form">
+            <input type="text" id="dev-ext" placeholder="分机，如 1009" style="flex:0 1 130px">
+            <input type="text" id="dev-name" placeholder="名称" style="flex:0 1 150px">
+            <input type="text" id="dev-zone" placeholder="区域" style="flex:0 1 120px">
+            <input type="password" id="dev-pass" placeholder="SIP 密码" style="flex:0 1 150px">
+            <input type="text" id="dev-snapshot" placeholder="抓拍 URL（可选）" class="wide">
+            <button class="btn btn-primary" onclick="addDevice()">添加</button>
+            <span class="hint" id="dev-msg"></span>
+          </div>
+          <div class="form-note">设备只在数据库为空时从 config.yaml 首次导入；之后以本页为准。</div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h2>设备列表</h2><span class="hint">每 2 秒刷新</span></div>
+          <table>
+            <thead><tr><th>分机</th><th>名称</th><th>区域</th><th>状态</th><th>联系地址</th><th>来源</th><th>型号 / 固件</th><th>最后注册</th><th>操作</th></tr></thead>
+            <tbody id="rows"><tr><td colspan="9" class="empty">加载中…</td></tr></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="tab-media" class="tab-panel">
+        <div class="panel">
+          <div class="panel-head"><h2>上传音频</h2><span class="hint">WAV / MP3，≤20MB</span></div>
+          <div class="form">
+            <input type="file" id="bc-file" accept=".wav,.mp3,audio/wav,audio/mpeg">
+            <button class="btn btn-primary" onclick="uploadMedia()">上传</button>
+            <span class="hint" id="media-msg"></span>
+          </div>
+          <div class="form-note">上传后可回到“广播”页面选择该音频播放。</div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h2>音频库</h2></div>
+          <table>
+            <thead><tr><th>名称</th><th>时长</th><th>大小</th><th>操作</th></tr></thead>
+            <tbody id="media-rows"><tr><td colspan="4" class="empty">还没有音频</td></tr></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="tab-schedules" class="tab-panel">
+        <div class="panel">
+          <div class="panel-head"><h2>新增定时任务</h2><span class="hint">cron：分 时 日 月 周</span></div>
+          <div class="form">
+            <input type="text" id="sch-name" placeholder="任务名" style="flex:0 1 140px">
+            <select id="sch-zone"></select>
+            <input type="text" id="sch-cron" value="0 8 * * 1-5" style="flex:0 1 140px">
+            <select id="sch-priority">
+              <option value="3" selected>通知</option>
+              <option value="2">实时</option>
+              <option value="0">紧急</option>
+            </select>
+            <input type="text" id="sch-text" placeholder="播报文本" class="wide">
+            <button class="btn btn-primary" onclick="addSchedule()">添加</button>
+            <span class="hint" id="sch-msg"></span>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h2>定时任务</h2><span class="hint">按服务器本地时间执行</span></div>
+          <table>
+            <thead><tr><th>任务</th><th>分区</th><th>Cron</th><th>下次</th><th>状态</th><th>操作</th></tr></thead>
+            <tbody id="sch-body"><tr><td colspan="6" class="empty">还没有定时任务</td></tr></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="tab-tts" class="tab-panel">
+        <div class="panel">
+          <div class="panel-head"><h2>TTS 服务</h2><span class="hint">支持 OpenAI 兼容接口和 MiniMax</span></div>
+          <div class="form">
+            <select id="tts-provider">
+              <option value="openai">OpenAI 兼容（OpenAI / 千问 / 本地 Kokoro）</option>
+              <option value="minimax">MiniMax</option>
+            </select>
+            <input type="text" id="tts-base" class="wide" placeholder="接口地址">
+            <input type="text" id="tts-model" placeholder="模型（可选）" style="flex:0 1 150px">
+            <input type="password" id="tts-key" placeholder="API Key（留空保持）" style="flex:0 1 190px">
+            <label class="hint"><input type="checkbox" id="tts-clear-key"> 清除已保存 Key</label>
+          </div>
+          <div class="form">
+            <input type="text" id="tts-voice-zh" placeholder="中文音色" style="flex:0 1 150px">
+            <input type="text" id="tts-voice-en" placeholder="英文音色" style="flex:0 1 150px">
+            <input type="number" id="tts-timeout" placeholder="超时秒" min="1" max="120" style="flex:0 1 110px;background:#fff;border:1px solid #d9e2ef;border-radius:8px;padding:8px 10px;min-height:36px">
+            <button class="btn btn-primary" onclick="saveTTS()">保存</button>
+            <button class="btn" onclick="testTTS()">测试合成</button>
+            <span class="hint" id="tts-msg"></span>
+          </div>
+          <div class="form-note" id="tts-key-hint">本地 Kokoro：provider=openai，base_url=http://127.0.0.1:8399，model 留空。</div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h2>公网示例</h2></div>
+          <div class="panel-body section-desc" style="margin:0">
+            <strong>OpenAI：</strong>provider=openai，base_url=https://api.openai.com/v1，model=tts-1，填 API Key。<br>
+            <strong>千问 DashScope：</strong>provider=openai，base_url=https://dashscope.aliyuncs.com/compatible-mode/v1，model=qwen-tts，音色如 Cherry。<br>
+            <strong>MiniMax：</strong>provider=minimax，base_url=https://api.minimax.chat/v1/t2a_v2?GroupId=你的GroupId，model=speech-01-turbo，音色用 MiniMax voice_id。
+          </div>
+        </div>
+      </section>
+
+      <section id="tab-system" class="tab-panel">
+        <div class="two-col">
+          <div class="panel">
+            <div class="panel-head"><h2>系统</h2></div>
+            <div class="panel-body">
+              <dl class="kv">
+                <dt>版本</dt><dd id="sys-version">—</dd>
+                <dt>运行时长</dt><dd id="sys-uptime">—</dd>
+                <dt>设备总数</dt><dd id="sys-devices">—</dd>
+                <dt>在线设备</dt><dd id="sys-online">—</dd>
+                <dt>G.711 转码</dt><dd id="sys-transcode">—</dd>
+              </dl>
+            </div>
+          </div>
+          <div class="panel">
+            <div class="panel-head"><h2>接口</h2></div>
+            <div class="panel-body section-desc" style="margin:0">
+              健康检查：<a href="/api/v1/healthz" target="_blank">/api/v1/healthz</a><br>
+              当前会话：<a href="/api/v1/session" target="_blank">/api/v1/session</a><br>
+              API 文档：<code>docs/MCS-API参考.md</code>
+            </div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h2>广播分区</h2><span class="hint">来自 config.yaml</span></div>
+          <table>
+            <thead><tr><th>ID</th><th>名称</th><th>寻呼短号</th><th>编码</th><th>模式</th><th>在线</th></tr></thead>
+            <tbody id="zones-body"><tr><td colspan="6" class="empty">加载中…</td></tr></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </div>
+</div>
+<script>
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const time = s => s ? new Date(s).toLocaleString('zh-CN', {hour12:false}) : '—';
+const dur = n => {
+  n = Number(n || 0);
+  const m = Math.floor(n / 60), sec = n % 60;
+  return m + ':' + String(sec).padStart(2, '0');
+};
+const resultLabel = r => ({answered:'接通', no_answer:'未接', busy:'忙', failed:'失败', canceled:'取消'}[r] || r || '—');
+
+async function getJSON(url){
+  const res = await fetch(url, {cache:'no-store'});
+  if(!res.ok) throw new Error(url + ' HTTP ' + res.status);
+  return res.json();
+}
+
+function renderDevices(data){
+  const items = data.items || [];
+  $('total').textContent = data.total ?? items.length;
+  $('online').textContent = data.online ?? items.filter(d => d.online).length;
+  const online = data.online ?? 0, total = data.total ?? items.length;
+  $('rate').textContent = total ? Math.round(online * 100 / total) + '%' : '—';
+  const tbody = $('rows');
+  if(!items.length){
+    tbody.innerHTML = '<tr><td colspan="9" class="empty">还没有设备，用上方表单添加</td></tr>';
+    return;
+  }
+  tbody.innerHTML = items.map(d => `
+    <tr>
+      <td class="ext">${esc(d.ext)}</td>
+      <td>${esc(d.name || '—')}</td>
+      <td>${esc(d.zone || '—')}</td>
+      <td><span class="dot ${d.online ? 'on' : 'off'}"></span>${d.online ? '在线' : '离线'}</td>
+      <td class="mono">${esc(d.contact || '—')}</td>
+      <td class="mono">${esc(d.source || '—')}</td>
+      <td class="badge">${esc(d.model || '—')}${d.firmware ? ' / ' + esc(d.firmware) : ''}</td>
+      <td class="badge">${time(d.last_seen)}</td>
+      <td><button class="test-btn" onclick="deleteDevice('${esc(d.ext)}')">删除</button></td>
+    </tr>`).join('');
+}
+
+function renderCalls(data){
+  const items = data.items || [];
+  $('active').textContent = items.length;
+  const navCalls = $('nav-calls');
+  if(navCalls) navCalls.textContent = items.length ? String(items.length) : '';
+  const tbody = $('calls-body');
+  if(!items.length){
+    tbody.innerHTML = '<tr><td colspan="5" class="empty">当前没有通话</td></tr>';
+    return;
+  }
+  tbody.innerHTML = items.map(c => `
+    <tr>
+      <td class="ext">${esc(c.from || '—')}</td>
+      <td class="ext">${esc(c.to || '—')}</td>
+      <td><span class="dot on"></span>${c.state === 'answered' ? '通话中' : '振铃中'}</td>
+      <td class="badge">${time(c.started_at)}</td>
+      <td>
+        ${c.video ? `<button class="test-btn" onclick="startVideo('${esc(c.call_id)}')">视频</button>` : ''}
+        ${c.state === 'answered' ? `<button class="test-btn" onclick="unlockCall('${esc(c.call_id)}')">开锁</button>` : ''}
+        <a href="/api/v1/devices/${encodeURIComponent((c.from || '').startsWith('6') ? c.from : (c.to || ''))}/snapshot?ts=${Date.now()}" target="_blank">抓拍</a>
+      </td>
+    </tr>`).join('');
+}
+
+const alarmState = s => ({ringing:'振铃中', answered:'通话中', pending:'待处置', closed:'已关闭', unanswered:'未接'}[s] || s || '—');
+
+function renderAlarms(data){
+  const items = data.items || [];
+  const pending = items.filter(a => a.state === 'pending' || a.state === 'ringing').length;
+  $('pending').textContent = pending;
+  const navAlarms = $('nav-alarms');
+  if(navAlarms) navAlarms.textContent = pending ? String(pending) : '';
+  const ovPending = $('ov-pending');
+  if(ovPending) ovPending.textContent = pending;
+  const tbody = $('alarms-body');
+  if(!items.length){
+    tbody.innerHTML = '<tr><td colspan="6" class="empty">还没有报警</td></tr>';
+    return;
+  }
+  tbody.innerHTML = items.map(a => `
+    <tr>
+      <td class="badge">${time(a.started_at)}</td>
+      <td class="ext">${esc(a.from || '—')}</td>
+      <td>${esc(a.device_name || '—')} <span class="badge">${esc(a.zone || '')}</span></td>
+      <td class="badge">${esc(a.level_name || ('L' + ((a.level || 0) + 1)))}</td>
+      <td><span class="dot ${a.state === 'closed' ? 'off' : 'on'}"></span>${alarmState(a.state)}</td>
+      <td>${a.state === 'closed' ? '—' : `<button class="test-btn" onclick="closeAlarm('${esc(a.id)}')">处置</button>`}</td>
+    </tr>`).join('');
+}
+
+async function closeAlarm(id){
+  const disposition = prompt('处置结果（已出警 / 误报 / 测试 / 其他）', '已出警');
+  if(disposition === null) return;
+  try{
+    await fetch('/api/v1/alarms/' + encodeURIComponent(id) + '/close', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({disposition: disposition || 'other', note: ''})
+    });
+    refresh();
+  }catch(e){}
+}
+
+const bcState = s => ({starting:'接入中', running:'播放中', finished:'已结束', partial:'部分失败', stopped:'已停止', preempted:'被抢占', failed:'失败'}[s] || s || '—');
+
+function renderBroadcast(data){
+  const items = data.items || [];
+  const tbody = $('bc-body');
+  if(!items.length){
+    tbody.innerHTML = '<tr><td colspan="5" class="empty">当前没有广播</td></tr>';
+    return;
+  }
+  tbody.innerHTML = items.map(b => `
+    <tr>
+      <td>${esc(b.zone_name || b.zone_id)}</td>
+      <td><span class="dot ${b.state === 'running' ? 'on' : 'off'}"></span>${bcState(b.state)}</td>
+      <td class="badge">${b.delivered}/${b.total}${b.failed ? ' · 失败 ' + b.failed : ''}</td>
+      <td>${esc((b.text || '').slice(0, 40))}${(b.text || '').length > 40 ? '…' : ''}</td>
+      <td class="badge">${time(b.started_at)}</td>
+    </tr>`).join('');
+}
+
+async function loadSchedules(){
+  try{
+    const data = await getJSON('/api/v1/broadcast/schedules');
+    const tbody = $('sch-body');
+    const items = data.items || [];
+    if(!items.length){ tbody.innerHTML = '<tr><td colspan="6" class="empty">还没有定时任务</td></tr>'; return; }
+    tbody.innerHTML = items.map(s => `
+      <tr>
+        <td>${esc(s.name)}</td>
+        <td class="badge">${esc(s.zone_id)}</td>
+        <td class="mono">${esc(s.cron)}</td>
+        <td class="badge">${time(s.next_run)}</td>
+        <td><span class="dot ${s.enabled ? 'on' : 'off'}"></span>${s.enabled ? '启用' : '停用'}</td>
+        <td>
+          <button class="test-btn" onclick="toggleSchedule('${esc(s.id)}', ${!s.enabled})">${s.enabled ? '停用' : '启用'}</button>
+          <button class="test-btn" onclick="deleteSchedule('${esc(s.id)}')">删除</button>
+        </td>
+      </tr>`).join('');
+  }catch(e){}
+}
+
+async function addSchedule(){
+  const name = $('sch-name').value.trim() || '定时广播';
+  const zone = $('sch-zone').value;
+  const cron = $('sch-cron').value.trim();
+  const text = $('sch-text').value.trim();
+  if(!zone){ $('sch-msg').textContent = '没有可用分区'; return; }
+  if(!cron){ $('sch-msg').textContent = '请填 cron'; return; }
+  if(!text){ $('sch-msg').textContent = '请填播报文本'; return; }
+  try{
+    const res = await fetch('/api/v1/broadcast/schedules', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({name, zone_id: zone, cron, text, priority: Number($('sch-priority').value), enabled: true})
+    });
+    const data = await res.json().catch(() => ({}));
+    if(!res.ok) throw new Error(data.message || ('HTTP ' + res.status));
+    $('sch-msg').textContent = '已添加，下次 ' + time(data.next_run);
+    $('sch-text').value = '';
+    loadSchedules();
+  }catch(e){ $('sch-msg').textContent = '添加失败：' + e.message; }
+}
+
+async function toggleSchedule(id, enabled){
+  try{
+    await fetch('/api/v1/broadcast/schedules/' + encodeURIComponent(id), {
+      method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({enabled})
+    });
+    loadSchedules();
+  }catch(e){}
+}
+
+async function deleteSchedule(id){
+  if(!confirm('删除这个定时任务？')) return;
+  try{
+    await fetch('/api/v1/broadcast/schedules/' + encodeURIComponent(id), {method:'DELETE'});
+    loadSchedules();
+  }catch(e){}
+}
+
+async function loadZones(){
+  try{
+    const data = await getJSON('/api/v1/broadcast/zones');
+    const sel = $('bc-zone');
+    const cur = sel.value;
+    sel.innerHTML = (data.items || []).map(z => `<option value="${esc(z.id)}">${esc(z.name)}${z.dial ? ' · 拨 ' + z.dial : ''}（${z.online}/${(z.members||[]).length} 在线）</option>`).join('');
+    if(cur) sel.value = cur;
+    if(!(data.items || []).length) sel.innerHTML = '<option value="">无可用分区</option>';
+    const sz = $('sch-zone');
+    const szCur = sz.value;
+    sz.innerHTML = (data.items || []).map(z => `<option value="${esc(z.id)}">${esc(z.name)}${z.dial ? ' · ' + z.dial : ''}</option>`).join('');
+    if(szCur) sz.value = szCur;
+  }catch(e){}
+}
+
+async function startBroadcast(){
+  const zone = $('bc-zone').value;
+  const text = $('bc-text').value.trim();
+  const priority = Number($('bc-priority').value);
+  if(!zone){ $('bc-msg').textContent = '没有可用分区'; return; }
+  if(!text){ $('bc-msg').textContent = '请输入广播文本'; return; }
+  $('bc-msg').textContent = '正在调用本机 TTS…';
+  try{
+    const res = await fetch('/api/v1/broadcast/start', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({zone_id: zone, text, priority})
+    });
+    const data = await res.json().catch(() => ({}));
+    if(!res.ok) throw new Error(data.message || ('HTTP ' + res.status));
+    $('bc-msg').textContent = '已开始：' + (data.zone_name || zone);
+    refresh();
+  }catch(e){
+    $('bc-msg').textContent = '广播失败：' + e.message;
+  }
+}
+
+async function loadMedia(){
+  try{
+    const data = await getJSON('/api/v1/media');
+    const sel = $('bc-media');
+    const cur = sel.value;
+    sel.innerHTML = '<option value="">音频库</option>' + (data.items || []).map(m =>
+      `<option value="${esc(m.id)}">${esc(m.name)}（${Math.round((m.duration_ms||0)/1000)}s）</option>`).join('');
+    if(cur) sel.value = cur;
+    renderMediaList(data.items || []);
+  }catch(e){}
+}
+
+async function uploadMedia(){
+  const input = $('bc-file');
+  if(!input.files || !input.files[0]){ $('media-msg').textContent = '先选一个 WAV 文件'; return; }
+  const form = new FormData();
+  form.append('file', input.files[0]);
+  form.append('name', input.files[0].name.replace(/\.wav$/i, ''));
+  $('media-msg').textContent = '上传中…';
+  try{
+    const res = await fetch('/api/v1/media', {method:'POST', body: form});
+    const data = await res.json().catch(() => ({}));
+    if(!res.ok) throw new Error(data.message || ('HTTP ' + res.status));
+    $('media-msg').textContent = '已上传：' + data.name;
+    input.value = '';
+    loadMedia();
+    await loadMedia();
+    $('bc-media').value = data.id;
+  }catch(e){ $('media-msg').textContent = '上传失败：' + e.message; }
+}
+
+async function startMediaBroadcast(){
+  const zone = $('bc-zone').value;
+  const media = $('bc-media').value;
+  if(!zone){ $('bc-msg').textContent = '没有可用分区'; return; }
+  if(!media){ $('bc-msg').textContent = '先在音频库选择或上传一个 WAV'; return; }
+  $('bc-msg').textContent = '正在启动音频广播…';
+  try{
+    const res = await fetch('/api/v1/broadcast/start', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({zone_id: zone, media_id: media, priority: Number($('bc-priority').value)})
+    });
+    const data = await res.json().catch(() => ({}));
+    if(!res.ok) throw new Error(data.message || ('HTTP ' + res.status));
+    $('bc-msg').textContent = '已开始：' + (data.text || '音频广播');
+    refresh();
+  }catch(e){ $('bc-msg').textContent = '广播失败：' + e.message; }
+}
+
+let viewerPC = null;
+let viewerMic = null;
+function waitICE(pc){
+  return new Promise(resolve => {
+    if(pc.iceGatheringState === 'complete') return resolve();
+    const timer = setTimeout(resolve, 2000);
+    pc.addEventListener('icegatheringstatechange', () => {
+      if(pc.iceGatheringState === 'complete'){ clearTimeout(timer); resolve(); }
+    });
+  });
+}
+
+async function startVideo(callId){
+  closeVideo();
+  const pc = new RTCPeerConnection({iceServers: []});
+  viewerPC = pc;
+  pc.addTransceiver('video', {direction: 'recvonly'});
+  try{
+    viewerMic = await navigator.mediaDevices.getUserMedia({audio: true});
+    viewerMic.getAudioTracks().forEach(t => pc.addTrack(t, viewerMic));
+  }catch(e){
+    pc.addTransceiver('audio', {direction: 'recvonly'});
+  }
+  pc.ontrack = e => { $('video-el').srcObject = e.streams[0] || new MediaStream([e.track]); };
+  pc.onconnectionstatechange = () => { if(pc.connectionState === 'failed') closeVideo(); };
+  try{
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    await waitICE(pc);
+    const res = await fetch('/api/v1/webrtc/offer', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({call_id: callId, sdp: pc.localDescription.sdp})
+    });
+    const data = await res.json().catch(() => ({}));
+    if(!res.ok) throw new Error(data.message || ('HTTP ' + res.status));
+    await pc.setRemoteDescription({type:'answer', sdp: data.sdp});
+    $('video-modal').hidden = false;
+  }catch(e){
+    closeVideo();
+    alert('视频连接失败：' + e.message);
+  }
+}
+
+function closeVideo(){
+  if(viewerPC){ viewerPC.close(); viewerPC = null; }
+  if(viewerMic){ viewerMic.getTracks().forEach(t => t.stop()); viewerMic = null; }
+  const v = $('video-el');
+  if(v) v.srcObject = null;
+  $('video-modal').hidden = true;
+}
+
+async function unlockCall(callId){
+  const code = prompt('开锁指令（默认 #，按门口机型号可填 * 或 #123）', '#');
+  if(code === null) return;
+  try{
+    const res = await fetch('/api/v1/intercom/' + encodeURIComponent(callId) + '/unlock', {
+      method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({code})
+    });
+    const data = await res.json().catch(() => ({}));
+    if(!res.ok) throw new Error(data.message || ('HTTP ' + res.status));
+    alert('开锁指令已发送');
+  }catch(e){ alert('开锁失败：' + e.message); }
+}
+
+async function stopBroadcast(){
+  const zone = $('bc-zone').value;
+  if(!zone) return;
+  try{
+    const res = await fetch('/api/v1/broadcast/stop', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({zone_id: zone})
+    });
+    if(!res.ok){ $('bc-msg').textContent = '当前分区没有活动广播'; return; }
+    $('bc-msg').textContent = '已停止';
+    refresh();
+  }catch(e){ $('bc-msg').textContent = e.message; }
+}
+
+function renderCDR(data){
+  const items = data.items || [];
+  const tbody = $('cdr-body');
+  if(!items.length){
+    tbody.innerHTML = '<tr><td colspan="6" class="empty">还没有话单</td></tr>';
+    return;
+  }
+  tbody.innerHTML = items.map(r => `
+    <tr>
+      <td class="badge">${time(r.start_at)}</td>
+      <td class="ext">${esc(r.from || '—')}</td>
+      <td class="ext">${esc(r.to || '—')}</td>
+      <td><span class="dot ${r.result === 'answered' ? 'on' : 'off'}"></span>${resultLabel(r.result)}</td>
+      <td class="badge">${dur(r.duration_s)}</td>
+      <td>${r.recording ? `<a href="${esc(r.recording)}" target="_blank">播放</a>` : '—'}</td>
+    </tr>`).join('');
+}
+
+let refreshFailures = 0;
+async function refresh(){
+  try{
+    const [devices, calls, cdr, alarms, bc] = await Promise.all([
+      getJSON('/api/v1/devices'),
+      getJSON('/api/v1/calls/active'),
+      getJSON('/api/v1/cdr?limit=20'),
+      getJSON('/api/v1/alarms?limit=20'),
+      getJSON('/api/v1/broadcast/active'),
+    ]);
+    refreshFailures = 0;
+    $('err').style.display = 'none';
+    renderDevices(devices);
+    renderCalls(calls);
+    renderCDR(cdr);
+    renderAlarms(alarms);
+    renderBroadcast(bc);
+    $('updated').textContent = '更新于 ' + new Date().toLocaleTimeString('zh-CN', {hour12:false});
+  }catch(e){
+    refreshFailures++;
+    if(refreshFailures >= 2){
+      $('err').style.display = 'block';
+      $('err').textContent = '无法连接 MCS API：' + e.message;
+    }
+  }
+}
+let alarmTimer;
+function showAlarm(d){
+  $('alarm-banner').hidden = false;
+  const lvl = d.level_name ? `【${d.level_name}】` : '';
+  $('alarm-text').textContent = `${lvl}${d.device_name || d.from || '未知设备'}（${d.zone || '—'}）→ ${d.to || '值班室'}`;
+  clearTimeout(alarmTimer);
+  alarmTimer = setTimeout(hideAlarm, 15000);
+  beep();
+}
+function hideAlarm(){ $('alarm-banner').hidden = true; }
+function beep(){
+  try{
+    const ac = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ac.createOscillator(), gain = ac.createGain();
+    osc.type = 'sine'; osc.frequency.value = 880;
+    gain.gain.setValueAtTime(0.001, ac.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.2, ac.currentTime + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + 0.35);
+    osc.connect(gain).connect(ac.destination);
+    osc.start(); osc.stop(ac.currentTime + 0.4);
+  }catch(e){}
+}
+async function testAlarm(){
+  try{ await fetch('/api/v1/alarm/test', {method:'POST'}); }catch(e){}
+}
+function connectWS(){
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  const ws = new WebSocket(`${proto}://${location.host}/api/v1/ws`);
+  ws.onmessage = e => {
+    try{
+      const ev = JSON.parse(e.data);
+      if(ev.type === 'alarm.created' || ev.type === 'alarm.escalated'){ showAlarm(ev.data); refresh(); }
+      else if(ev.type === 'alarm.closed' || ev.type === 'alarm.updated' || ev.type === 'alarm.answered'){ refresh(); }
+    }catch(_){}
+  };
+  ws.onclose = () => setTimeout(connectWS, 3000);
+  ws.onerror = () => ws.close();
+}
+let appStarted = false;
+function startApp(){
+  if(appStarted) return;
+  appStarted = true;
+  loadZones();
+  loadMedia();
+  loadSchedules();
+  loadTTSConfig();
+  loadSystemInfo();
+  showTab(location.hash ? location.hash.slice(1) : 'overview');
+  refresh();
+  connectWS();
+  setInterval(refresh, 2000);
+}
+
+async function boot(){
+  try{
+    const s = await fetch('/api/v1/session').then(r => r.json());
+    if(s.auth_required && !s.logged_in){
+      $('login-modal').hidden = false;
+      $('login-user').value = s.user || 'admin';
+      $('login-pass').focus();
+      return;
+    }
+    $('login-modal').hidden = true;
+    $('logout-btn').hidden = !s.auth_required;
+    startApp();
+  }catch(e){
+    $('login-modal').hidden = false;
+    $('login-msg').textContent = '无法连接 MCS：' + e.message;
+  }
+}
+
+async function doLogin(){
+  const username = $('login-user').value.trim();
+  const password = $('login-pass').value;
+  $('login-msg').textContent = '';
+  try{
+    const res = await fetch('/api/v1/login', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({username, password})
+    });
+    const data = await res.json().catch(() => ({}));
+    if(!res.ok) throw new Error(data.message || ('HTTP ' + res.status));
+    $('login-modal').hidden = true;
+    $('logout-btn').hidden = false;
+    $('login-pass').value = '';
+    startApp();
+  }catch(e){ $('login-msg').textContent = '登录失败：' + e.message; }
+}
+
+async function doLogout(){
+  try{ await fetch('/api/v1/logout', {method:'POST'}); }catch(e){}
+  location.reload();
+}
+
+async function addDevice(){
+  const body = {
+    ext: $('dev-ext').value.trim(),
+    name: $('dev-name').value.trim(),
+    zone: $('dev-zone').value.trim(),
+    password: $('dev-pass').value,
+    snapshot: $('dev-snapshot').value.trim()
+  };
+  if(!body.ext || !body.name || !body.password){ $('dev-msg').textContent = '分机/名称/密码必填'; return; }
+  try{
+    const res = await fetch('/api/v1/devices', {
+      method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)
+    });
+    const data = await res.json().catch(() => ({}));
+    if(!res.ok) throw new Error(data.message || ('HTTP ' + res.status));
+    $('dev-msg').textContent = '已添加 ' + body.ext;
+    $('dev-ext').value = ''; $('dev-name').value = ''; $('dev-pass').value = ''; $('dev-snapshot').value = '';
+    refresh();
+  }catch(e){ $('dev-msg').textContent = '添加失败：' + e.message; }
+}
+
+async function deleteDevice(ext){
+  if(!confirm('删除分机 ' + ext + '？')) return;
+  try{
+    const res = await fetch('/api/v1/devices/' + encodeURIComponent(ext), {method:'DELETE'});
+    const data = await res.json().catch(() => ({}));
+    if(!res.ok) throw new Error(data.message || ('HTTP ' + res.status));
+    refresh();
+  }catch(e){ alert('删除失败：' + e.message); }
+}
+
+
+async function loadTTSConfig(){
+  try{
+    const d = await getJSON('/api/v1/tts/config');
+    $('tts-provider').value = d.provider || 'openai';
+    $('tts-base').value = d.base_url || '';
+    $('tts-model').value = d.model || '';
+    $('tts-voice-zh').value = d.voice_zh || '';
+    $('tts-voice-en').value = d.voice_en || '';
+    $('tts-timeout').value = d.timeout_s || 30;
+    $('tts-key').value = '';
+    $('tts-key').placeholder = d.has_api_key ? '已保存 Key（留空不改）' : 'API Key（本地可留空）';
+    $('tts-key-hint').textContent = d.has_api_key ? '已保存 API Key；勾选“清除已保存 Key”可删除。' : '尚未保存 API Key。';
+  }catch(e){}
+}
+
+async function saveTTS(){
+  const body = {
+    provider: $('tts-provider').value,
+    base_url: $('tts-base').value.trim(),
+    model: $('tts-model').value.trim(),
+    voice_zh: $('tts-voice-zh').value.trim(),
+    voice_en: $('tts-voice-en').value.trim(),
+    timeout_s: Number($('tts-timeout').value) || 30,
+    clear_api_key: $('tts-clear-key').checked
+  };
+  const key = $('tts-key').value.trim();
+  if(key) body.api_key = key;
+  try{
+    const res = await fetch('/api/v1/tts/config', {method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+    const d = await res.json().catch(() => ({}));
+    if(!res.ok) throw new Error(d.message || ('HTTP ' + res.status));
+    $('tts-msg').textContent = '已保存，广播将使用新配置';
+    loadTTSConfig();
+  }catch(e){ $('tts-msg').textContent = '保存失败：' + e.message; }
+}
+
+async function testTTS(){
+  $('tts-msg').textContent = '正在测试合成…';
+  try{
+    const res = await fetch('/api/v1/tts/test', {method:'POST'});
+    const d = await res.json().catch(() => ({}));
+    if(!res.ok) throw new Error(d.message || ('HTTP ' + res.status));
+    $('tts-msg').textContent = '测试成功，返回 ' + d.bytes + ' 字节';
+  }catch(e){ $('tts-msg').textContent = '测试失败：' + e.message; }
+}
+
+const tabMeta = {
+  overview: ['总览', '常用操作与运行概况'],
+  alarms: ['报警', '报警事件与处置'],
+  calls: ['通话与对讲', '活动通话、视频与话单'],
+  broadcast: ['广播', 'TTS、音频库与分区广播'],
+  devices: ['设备管理', '分机、密码与上线状态'],
+  media: ['音频库', '上传和管理广播 WAV'],
+  schedules: ['定时任务', '按 cron 自动广播'],
+  tts: ['TTS 设置', '本地/公网语音合成服务'],
+  system: ['系统信息', '版本、分区与接口状态']
+};
+
+function showTab(name){
+  if(!tabMeta[name]) name = 'overview';
+  document.querySelectorAll('.tab-panel').forEach(el => el.classList.toggle('active', el.id === 'tab-' + name));
+  document.querySelectorAll('.nav-item').forEach(el => el.classList.toggle('active', el.dataset.tab === name));
+  const mobileNav = $('mobile-nav');
+  if(mobileNav) mobileNav.value = name;
+  $('page-title').textContent = tabMeta[name][0];
+  $('page-sub').textContent = tabMeta[name][1];
+  if(location.hash !== '#' + name) history.replaceState(null, '', '#' + name);
+  window.scrollTo({top: 0, behavior: 'smooth'});
+}
+
+async function loadSystemInfo(){
+  try{
+    const info = await getJSON('/api/v1/system/info');
+    const set = (id, v) => { const el = $(id); if(el) el.textContent = v; };
+    set('sys-version', info.version || '—');
+    set('ov-version', info.version || '—');
+    set('sys-uptime', (info.uptime_s >= 3600 ? Math.floor(info.uptime_s/3600) + ' 小时 ' : '') + Math.floor((info.uptime_s%3600)/60) + ' 分钟');
+    set('ov-uptime', (info.uptime_s >= 3600 ? Math.floor(info.uptime_s/3600) + 'h ' : '') + Math.floor((info.uptime_s%3600)/60) + 'm');
+    set('sys-devices', info.devices ?? '—');
+    set('sys-online', info.online ?? '—');
+    set('sys-transcode', info.transcode ? '已开启（兼容模式）' : '关闭（默认）');
+    set('ov-devices', info.devices ?? '—');
+    set('ov-online', info.online ?? '—');
+  }catch(e){}
+  try{
+    const zones = await getJSON('/api/v1/broadcast/zones');
+    const tbody = $('zones-body');
+    if(tbody){
+      const items = zones.items || [];
+      tbody.innerHTML = items.length ? items.map(z => `
+        <tr><td class="mono">${esc(z.id)}</td><td>${esc(z.name)}</td>
+        <td class="mono">${esc(z.dial || '—')}</td><td class="badge">${esc(z.codec || 'pcmu')}</td><td>${esc(z.mode)}</td>
+        <td>${z.online}/${(z.members || []).length}</td></tr>`).join('') :
+        '<tr><td colspan="6" class="empty">还没有分区</td></tr>';
+    }
+  }catch(e){}
+}
+
+function renderMediaList(items){
+  const tbody = $('media-rows');
+  if(!tbody) return;
+  if(!items.length){ tbody.innerHTML = '<tr><td colspan="4" class="empty">还没有音频</td></tr>'; return; }
+  tbody.innerHTML = items.map(m => `
+    <tr><td>${esc(m.name)}</td><td class="badge">${Math.round((m.duration_ms||0)/100)/10}s</td>
+    <td class="badge">${Math.round((m.size||0)/1024)} KB</td>
+    <td><a class="link" href="/api/v1/media/${encodeURIComponent(m.id)}/download">下载</a>
+    <button class="btn btn-danger btn-sm" onclick="deleteMediaItem('${esc(m.id)}')">删除</button></td></tr>`).join('');
+}
+
+async function deleteMediaItem(id){
+  if(!confirm('删除这段音频？')) return;
+  try{
+    const res = await fetch('/api/v1/media/' + encodeURIComponent(id), {method:'DELETE'});
+    if(!res.ok) throw new Error('HTTP ' + res.status);
+    loadMedia();
+  }catch(e){ alert('删除失败：' + e.message); }
+}
+
+window.addEventListener('hashchange', () => showTab(location.hash.slice(1)));
+boot();
+</script>
+</body>
+</html>

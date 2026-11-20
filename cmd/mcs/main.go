@@ -1,0 +1,214 @@
+package main
+
+import (
+	"context"
+	"crypto/rand"
+	"crypto/tls"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"flag"
+	"fmt"
+	"io"
+	"log/slog"
+	"net/http"
+	"os"
+	"os/signal"
+	"path/filepath"
+	"syscall"
+	"time"
+
+	"mcs/internal/api"
+	"mcs/internal/config"
+	"mcs/internal/sipserver"
+	"mcs/internal/store"
+)
+
+var version = "0.1.0-dev"
+
+func main() {
+	var (
+		configPath  = flag.String("config", "config.yaml", "path to YAML config")
+		logPath     = flag.String("log", "", "optional log file (also logs to stdout)")
+		serviceMode = flag.Bool("service", false, "run as Windows service")
+		showVersion = flag.Bool("version", false, "print version and exit")
+	)
+	flag.Parse()
+	if *showVersion {
+		fmt.Println("mcs", version)
+		return
+	}
+	if *serviceMode {
+		if err := runWindowsService(*configPath, *logPath); err != nil {
+			fmt.Fprintf(os.Stderr, "mcs service: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	if err := runServer(ctx, *configPath, *logPath); err != nil {
+		fmt.Fprintf(os.Stderr, "mcs: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+func newLogger(logPath string) (*slog.Logger, io.Closer, error) {
+	var writers []io.Writer
+	writers = append(writers, os.Stdout)
+	var closer io.Closer
+	if logPath != "" {
+		if err := os.MkdirAll(filepath.Dir(logPath), 0o755); err != nil && filepath.Dir(logPath) != "." {
+			return nil, nil, err
+		}
+		f, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+		if err != nil {
+			return nil, nil, err
+		}
+		closer = f
+		writers = append(writers, f)
+	}
+	return slog.New(slog.NewTextHandler(io.MultiWriter(writers...), &slog.HandlerOptions{Level: slog.LevelInfo})), closer, nil
+}
+
+func runServer(parent context.Context, configPath, logPath string) error {
+	cfg, err := config.Load(configPath)
+	if err != nil {
+		return fmt.Errorf("%w\nhint: cp config.example.yaml config.yaml && edit it", err)
+	}
+
+	logger, logCloser, err := newLogger(logPath)
+	if err != nil {
+		return fmt.Errorf("open log: %w", err)
+	}
+	if logCloser != nil {
+		defer logCloser.Close()
+	}
+	slog.SetDefault(logger)
+
+	secret := cfg.Auth.Secret
+	if secret == "" {
+		buf := make([]byte, 32)
+		if _, err := rand.Read(buf); err != nil {
+			return fmt.Errorf("generate auth secret: %w", err)
+		}
+		secret = hex.EncodeToString(buf)
+		logger.Warn("auth.secret is empty, generated an ephemeral secret (nonces reset on restart)")
+	}
+
+	if err := os.MkdirAll(cfg.Storage.DataDir, 0o755); err != nil {
+		return fmt.Errorf("create data dir: %w", err)
+	}
+	dbPath := filepath.Join(cfg.Storage.DataDir, "mcs.db")
+	db, err := store.OpenDB(dbPath)
+	if err != nil {
+		return fmt.Errorf("open sqlite %s: %w", dbPath, err)
+	}
+	defer db.Close()
+
+	ttsCfg := cfg.TTS
+	if raw, ok := db.GetSetting("tts"); ok {
+		var saved config.TTSConfig
+		if err := json.Unmarshal([]byte(raw), &saved); err == nil {
+			ttsCfg = saved
+		}
+	}
+	st := store.NewWithDB(cfg.Devices, db)
+	cdr := store.NewCDRStoreDB(2000, db)
+	alarms := store.NewAlarmStoreDB(1000, db)
+	auth := sipserver.NewAuthenticator(cfg.Auth.Realm, secret)
+	sipSrv, err := sipserver.New(st, auth, cdr, alarms, sipserver.Options{
+		Domain: cfg.Server.Domain, Advertise: cfg.Server.Advertise, DataDir: cfg.Storage.DataDir,
+		Alarm: cfg.Alarm, Broadcast: cfg.Broadcast, Media: cfg.Media, TTS: ttsCfg, Zones: cfg.Zones,
+	}, logger)
+	if err != nil {
+		return fmt.Errorf("init sip server: %w", err)
+	}
+
+	consoleUser := cfg.Auth.ConsoleUser
+	if consoleUser == "" {
+		consoleUser = "admin"
+	}
+	apiOpts := []api.Option{}
+	if cfg.Auth.ConsolePassword != "" {
+		apiOpts = append(apiOpts, api.WithConsoleAuth(consoleUser, cfg.Auth.ConsolePassword))
+	}
+	apiOpts = append(apiOpts, api.WithDB(db))
+	handler := api.New(st, cdr, alarms, sipSrv, cfg.Storage.DataDir, version, apiOpts...).Handler()
+	httpSrv := &http.Server{
+		Addr:              cfg.Server.HTTP,
+		Handler:           handler,
+		ReadHeaderTimeout: 5 * time.Second,
+	}
+	var httpsSrv *http.Server
+
+	ctx, cancel := context.WithCancel(parent)
+	defer cancel()
+
+	sipSrv.StartScheduler(ctx)
+	go func() {
+		if err := sipSrv.Serve(ctx, cfg.Server.SIPUDP); err != nil && ctx.Err() == nil {
+			logger.Error("sip server stopped", "error", err)
+			cancel()
+		}
+	}()
+	if cfg.Server.SIPTLS != "" {
+		if cfg.Server.TLSCert == "" || cfg.Server.TLSKey == "" {
+			logger.Warn("sip_tls configured without tls_cert/tls_key, TLS not started")
+		} else {
+			go func() {
+				if err := sipSrv.ServeTLS(ctx, cfg.Server.SIPTLS, cfg.Server.TLSCert, cfg.Server.TLSKey); err != nil && ctx.Err() == nil {
+					logger.Error("sip tls stopped", "error", err)
+					cancel()
+				}
+			}()
+		}
+	}
+	if cfg.Server.HTTPS != "" {
+		cert, key := cfg.Server.HTTPSCert, cfg.Server.HTTPSKey
+		if cert == "" {
+			cert = cfg.Server.TLSCert
+		}
+		if key == "" {
+			key = cfg.Server.TLSKey
+		}
+		if cert == "" || key == "" {
+			logger.Warn("https configured without certificate, HTTPS not started")
+		} else {
+			httpsSrv = &http.Server{
+				Addr:              cfg.Server.HTTPS,
+				Handler:           handler,
+				ReadHeaderTimeout: 5 * time.Second,
+				TLSConfig:         &tls.Config{MinVersion: tls.VersionTLS12},
+			}
+			go func() {
+				logger.Info("https listening", "addr", cfg.Server.HTTPS)
+				if err := httpsSrv.ListenAndServeTLS(cert, key); err != nil && !errors.Is(err, http.ErrServerClosed) {
+					logger.Error("https server stopped", "error", err)
+					cancel()
+				}
+			}()
+		}
+	}
+	go func() {
+		logger.Info("http listening", "addr", cfg.Server.HTTP)
+		if err := httpSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			logger.Error("http server stopped", "error", err)
+			cancel()
+		}
+	}()
+
+	logger.Info("mcs started", "version", version, "sip", cfg.Server.SIPUDP, "http", cfg.Server.HTTP, "devices", len(cfg.Devices), "db", dbPath)
+	<-ctx.Done()
+	logger.Info("shutting down")
+
+	shutdownCtx, cancelShutdown := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancelShutdown()
+	_ = httpSrv.Shutdown(shutdownCtx)
+	if httpsSrv != nil {
+		_ = httpsSrv.Shutdown(shutdownCtx)
+	}
+	_ = sipSrv.Close()
+	return nil
+}

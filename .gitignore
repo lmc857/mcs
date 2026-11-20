@@ -1,0 +1,14 @@
+bin/
+dist/
+data/
+data-lan/
+.run/
+config.yaml
+hello.mp3
+MCS-Setup-*.exe
+.gocache/
+.gomodcache/
+.gopath/
+.gotmp/
+*.log
+.DS_Store
