@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -15,6 +16,7 @@ import (
 	"github.com/pion/rtp"
 
 	"mcs/internal/config"
+	"mcs/internal/store"
 )
 
 const conferenceFrameSamples = 160 // 20 ms @ 8 kHz
@@ -27,10 +29,11 @@ type conferenceManager struct {
 }
 
 type conferenceRoom struct {
-	number string
-	name   string
-	max    int
-	record bool
+	number  string
+	name    string
+	max     int
+	record  bool
+	enabled bool
 
 	mu        sync.Mutex
 	parts     map[string]*conferenceParticipant
@@ -84,6 +87,8 @@ type ConferenceRoomView struct {
 	Number       string                      `json:"number"`
 	Name         string                      `json:"name"`
 	MaxMembers   int                         `json:"max_members"`
+	Record       bool                        `json:"record"`
+	Enabled      bool                        `json:"enabled"`
 	Active       int                         `json:"active"`
 	Recording    string                      `json:"recording,omitempty"`
 	Participants []ConferenceParticipantView `json:"participants"`
@@ -91,19 +96,38 @@ type ConferenceRoomView struct {
 
 func newConferenceManager(s *Server, cfg config.ConferenceConfig) *conferenceManager {
 	m := &conferenceManager{server: s, rooms: map[string]*conferenceRoom{}, byCall: map[string]*conferenceParticipant{}}
-	if !cfg.Enabled {
-		return m
+	if s.store != nil {
+		for _, rc := range s.store.ListConferenceRooms() {
+			if rc.Number == "" {
+				continue
+			}
+			if rc.MaxMembers <= 0 {
+				rc.MaxMembers = 8
+			}
+			m.rooms[rc.Number] = &conferenceRoom{
+				number: rc.Number, name: rc.Name, max: rc.MaxMembers, record: rc.Record, enabled: rc.Enabled,
+				parts: map[string]*conferenceParticipant{}, done: make(chan struct{}), server: s,
+			}
+		}
 	}
-	for _, rc := range cfg.Rooms {
-		if rc.Number == "" {
-			continue
-		}
-		if rc.MaxMembers <= 0 {
-			rc.MaxMembers = 8
-		}
-		m.rooms[rc.Number] = &conferenceRoom{
-			number: rc.Number, name: rc.Name, max: rc.MaxMembers, record: rc.Record,
-			parts: map[string]*conferenceParticipant{}, done: make(chan struct{}), server: s,
+	// The YAML rooms are a bootstrap seed only. After the first room exists,
+	// the web console/DB is the source of truth.
+	if len(m.rooms) == 0 && cfg.Enabled {
+		for _, rc := range cfg.Rooms {
+			if rc.Number == "" {
+				continue
+			}
+			if rc.MaxMembers <= 0 {
+				rc.MaxMembers = 8
+			}
+			room := &conferenceRoom{
+				number: rc.Number, name: rc.Name, max: rc.MaxMembers, record: rc.Record, enabled: true,
+				parts: map[string]*conferenceParticipant{}, done: make(chan struct{}), server: s,
+			}
+			m.rooms[rc.Number] = room
+			if s.store != nil {
+				_ = s.store.SaveConferenceRoom(store.ConferenceRoom{Number: rc.Number, Name: rc.Name, MaxMembers: rc.MaxMembers, Record: rc.Record, Enabled: true})
+			}
 		}
 	}
 	return m
@@ -116,7 +140,16 @@ func (m *conferenceManager) find(number string) (*conferenceRoom, bool) {
 	m.mu.RLock()
 	r, ok := m.rooms[number]
 	m.mu.RUnlock()
-	return r, ok
+	if !ok {
+		return nil, false
+	}
+	r.mu.Lock()
+	enabled := r.enabled
+	r.mu.Unlock()
+	if !enabled {
+		return nil, false
+	}
+	return r, true
 }
 
 func (m *conferenceManager) byCallID(id string) *conferenceParticipant {
@@ -158,6 +191,107 @@ func (m *conferenceManager) view() []ConferenceRoomView {
 	return out
 }
 
+func (m *conferenceManager) room(number string) *conferenceRoom {
+	m.mu.RLock()
+	r := m.rooms[number]
+	m.mu.RUnlock()
+	return r
+}
+
+func (m *conferenceManager) create(number, name string, max int, record bool) error {
+	number = strings.TrimSpace(number)
+	if !validConferenceNumber(number) {
+		return fmt.Errorf("会议短号必须是 1-16 位数字")
+	}
+	if max <= 0 {
+		max = 8
+	}
+	if max > 16 {
+		return fmt.Errorf("会议方数不能超过 16")
+	}
+	if name == "" {
+		name = "会议 " + number
+	}
+	if m.server.isAlarm(number) || m.server.findZoneByDialExists(number) {
+		return fmt.Errorf("会议短号与报警号码或广播寻呼短号冲突")
+	}
+	if _, ok := m.server.store.Get(number); ok {
+		return fmt.Errorf("会议短号与分机号冲突")
+	}
+	m.mu.Lock()
+	if _, exists := m.rooms[number]; exists {
+		m.mu.Unlock()
+		return fmt.Errorf("会议短号已存在")
+	}
+	r := &conferenceRoom{
+		number: number, name: name, max: max, record: record, enabled: true,
+		parts: map[string]*conferenceParticipant{}, done: make(chan struct{}), server: m.server,
+	}
+	m.rooms[number] = r
+	m.mu.Unlock()
+	if m.server.store != nil {
+		if err := m.server.store.SaveConferenceRoom(store.ConferenceRoom{Number: number, Name: name, MaxMembers: max, Record: record, Enabled: true}); err != nil {
+			m.mu.Lock()
+			delete(m.rooms, number)
+			m.mu.Unlock()
+			return err
+		}
+	}
+	return nil
+}
+
+func (m *conferenceManager) update(number, name string, max int, record, enabled bool) error {
+	r := m.room(number)
+	if r == nil {
+		return fmt.Errorf("会议房间不存在")
+	}
+	if max <= 0 {
+		max = 8
+	}
+	if max > 16 {
+		return fmt.Errorf("会议方数不能超过 16")
+	}
+	r.mu.Lock()
+	if len(r.parts) > max {
+		r.mu.Unlock()
+		return fmt.Errorf("当前参会人数超过新的方数上限")
+	}
+	if name != "" {
+		r.name = name
+	}
+	r.max = max
+	r.record = record
+	r.enabled = enabled
+	name = r.name
+	record = r.record
+	enabled = r.enabled
+	r.mu.Unlock()
+	if m.server.store != nil {
+		return m.server.store.SaveConferenceRoom(store.ConferenceRoom{Number: number, Name: name, MaxMembers: max, Record: record, Enabled: enabled})
+	}
+	return nil
+}
+
+func (m *conferenceManager) removeRoom(number string) error {
+	r := m.room(number)
+	if r == nil {
+		return fmt.Errorf("会议房间不存在")
+	}
+	r.mu.Lock()
+	active := len(r.parts)
+	r.mu.Unlock()
+	if active > 0 {
+		return fmt.Errorf("房间还有参会者，不能删除")
+	}
+	m.mu.Lock()
+	delete(m.rooms, number)
+	m.mu.Unlock()
+	if m.server.store != nil {
+		return m.server.store.DeleteConferenceRoom(number)
+	}
+	return nil
+}
+
 func (m *conferenceManager) kick(roomNumber, id string) error {
 	r, ok := m.find(roomNumber)
 	if !ok {
@@ -189,7 +323,7 @@ func (m *conferenceManager) mute(roomNumber, id string, muted bool) error {
 func (r *conferenceRoom) view() ConferenceRoomView {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	v := ConferenceRoomView{Number: r.number, Name: r.name, MaxMembers: r.max, Recording: r.recording}
+	v := ConferenceRoomView{Number: r.number, Name: r.name, MaxMembers: r.max, Record: r.record, Enabled: r.enabled, Recording: r.recording}
 	for _, p := range r.parts {
 		p.mu.Lock()
 		item := ConferenceParticipantView{ID: p.id, Ext: p.ext, Name: p.name, Muted: p.muted, Codec: p.codec, JoinedAt: p.joinedAt.Format(time.RFC3339)}
@@ -414,6 +548,27 @@ func (p *conferenceParticipant) stop(sendBye bool) {
 	})
 }
 
+func (s *Server) CreateConferenceRoom(number, name string, max int, record bool) error {
+	if s.conference == nil {
+		return fmt.Errorf("conference disabled")
+	}
+	return s.conference.create(number, name, max, record)
+}
+
+func (s *Server) UpdateConferenceRoom(number, name string, max int, record, enabled bool) error {
+	if s.conference == nil {
+		return fmt.Errorf("conference disabled")
+	}
+	return s.conference.update(number, name, max, record, enabled)
+}
+
+func (s *Server) DeleteConferenceRoom(number string) error {
+	if s.conference == nil {
+		return fmt.Errorf("conference disabled")
+	}
+	return s.conference.removeRoom(number)
+}
+
 func (s *Server) ConferenceView() []ConferenceRoomView {
 	if s.conference == nil {
 		return nil
@@ -501,6 +656,23 @@ func (s *Server) handleConferenceInvite(req *sip.Request, tx sip.ServerTransacti
 	case <-room.done:
 		p.stop(false)
 	}
+}
+
+func validConferenceNumber(number string) bool {
+	if len(number) < 1 || len(number) > 16 {
+		return false
+	}
+	for _, r := range number {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+func (s *Server) findZoneByDialExists(number string) bool {
+	_, ok := s.findZoneByDial(number)
+	return ok
 }
 
 func conferenceCodec(info sdpInfo) (string, uint8, bool) {

@@ -496,7 +496,15 @@ textarea.bc-text{margin:0 17px 12px;width:calc(100% - 34px)}
       <section id="tab-conference" class="tab-panel">
         <div class="panel">
           <div class="panel-head"><h2>电话会议</h2><span class="hint">话机拨会议短号加入；当前支持 PCMU/PCMA 音频</span></div>
-          <div class="form-note">会议房间来自 config.yaml 的 conference 段。话机拨房间短号即可加入；网页静音/踢人使用控制台登录账号（不是 SIP 分机账号）。</div>
+          <div class="form-note">话机拨房间短号即可加入；网页静音/踢人使用控制台登录账号（不是 SIP 分机账号）。会议短号与广播寻呼短号是两套号码：会议是双向混音，寻呼是单向广播。</div>
+          <div id="conference-admin" class="form" data-admin-only style="display:none">
+            <input type="text" id="conf-new-number" placeholder="会议短号，如 7000" style="flex:0 1 150px">
+            <input type="text" id="conf-new-name" placeholder="房间名称" style="flex:0 1 180px">
+            <input type="text" id="conf-new-max" placeholder="方数 8" style="flex:0 1 90px">
+            <label class="hint"><input type="checkbox" id="conf-new-record" checked> 录音</label>
+            <button class="btn btn-primary" data-admin-only onclick="addConferenceRoom()">创建房间</button>
+            <span class="hint" id="conf-admin-msg"></span>
+          </div>
           <div id="conference-rooms" class="panel-body" style="padding:0 17px 16px"><div class="empty">加载中…</div></div>
         </div>
       </section>
@@ -652,12 +660,70 @@ function renderDevices(data){
     </tr>`).join('');
 }
 
+let conferenceRooms = [];
+
+async function addConferenceRoom(){
+  const number = $('conf-new-number').value.trim();
+  const name = $('conf-new-name').value.trim();
+  const max = Number($('conf-new-max').value) || 8;
+  if(!/^\d{1,16}$/.test(number)){ $('conf-admin-msg').textContent = '会议短号必须是数字，例如 7000'; return; }
+  try{
+    const res = await fetch('/api/v1/conference/rooms', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({number,name,max_members:max,record:$('conf-new-record').checked})});
+    const d = await res.json().catch(() => ({}));
+    if(!res.ok) throw new Error(d.message || ('HTTP ' + res.status));
+    $('conf-admin-msg').textContent = '房间 ' + number + ' 已创建';
+    $('conf-new-number').value = ''; $('conf-new-name').value = '';
+    refresh();
+  }catch(e){ $('conf-admin-msg').textContent = '创建失败：' + e.message; }
+}
+
+async function saveConferenceRoom(number, enabled){
+  const room = conferenceRooms.find(r => r.number === number);
+  if(!room) return;
+  const name = prompt('房间名称', room.name || '');
+  if(name === null) return;
+  const max = Number(prompt('最大方数（1-16）', room.max_members || 8));
+  if(!max) return;
+  const record = confirm('是否启用会议录音？');
+  try{
+    const res = await fetch('/api/v1/conference/rooms/' + encodeURIComponent(number), {method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({name,max_members:max,record,enabled})});
+    const d = await res.json().catch(() => ({}));
+    if(!res.ok) throw new Error(d.message || ('HTTP ' + res.status));
+    $('conf-admin-msg').textContent = '房间已更新';
+    refresh();
+  }catch(e){ $('conf-admin-msg').textContent = '更新失败：' + e.message; }
+}
+
+async function toggleConferenceRoom(number, enabled){
+  const room = conferenceRooms.find(r => r.number === number);
+  if(!room) return;
+  try{
+    const res = await fetch('/api/v1/conference/rooms/' + encodeURIComponent(number), {method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({name:room.name,max_members:room.max_members,record:room.record,enabled})});
+    const d = await res.json().catch(() => ({}));
+    if(!res.ok) throw new Error(d.message || ('HTTP ' + res.status));
+    $('conf-admin-msg').textContent = '房间已' + (enabled ? '启用' : '停用');
+    refresh();
+  }catch(e){ $('conf-admin-msg').textContent = '操作失败：' + e.message; }
+}
+
+async function deleteConferenceRoom(number){
+  if(!confirm('删除会议房间 ' + number + '？房间有参会者时不能删除。')) return;
+  try{
+    const res = await fetch('/api/v1/conference/rooms/' + encodeURIComponent(number), {method:'DELETE'});
+    const d = await res.json().catch(() => ({}));
+    if(!res.ok) throw new Error(d.message || ('HTTP ' + res.status));
+    $('conf-admin-msg').textContent = '房间已删除';
+    refresh();
+  }catch(e){ $('conf-admin-msg').textContent = '删除失败：' + e.message; }
+}
+
 function renderConference(data){
   const box = $('conference-rooms');
   if(!box) return;
   const rooms = data.items || [];
+  conferenceRooms = rooms;
   if(!rooms.length){
-    box.innerHTML = '<div class="empty">还没有会议房间，请在 config.yaml 配置 conference.rooms</div>';
+    box.innerHTML = '<div class="empty">还没有会议房间。管理员可以在上方直接创建。</div>';
     return;
   }
   box.innerHTML = rooms.map(r => {
@@ -673,9 +739,13 @@ function renderConference(data){
           <button class="test-btn" onclick="conferenceKick('${esc(r.number)}','${esc(p.id)}')">踢出</button>`}
         </td>
       </tr>`).join('');
+    const adminTools = currentRole === 'admin' ? `
+      <button class="test-btn" onclick="saveConferenceRoom('${esc(r.number)}',${r.enabled ? 'true' : 'false'})">编辑</button>
+      <button class="test-btn" onclick="toggleConferenceRoom('${esc(r.number)}',${r.enabled ? 'false' : 'true'})">${r.enabled ? '停用' : '启用'}</button>
+      <button class="test-btn" onclick="deleteConferenceRoom('${esc(r.number)}')">删除</button>` : '';
     return `<div class="panel" style="margin-bottom:12px;box-shadow:none">
-      <div class="panel-head"><div><strong>${esc(r.name || r.number)}</strong> <span class="badge mono">${esc(r.number)}</span></div>
-        <span class="hint">${r.active}/${r.max_members} 方${r.recording ? ' · <a class="link" href="' + esc(r.recording) + '">录音</a>' : ''}</span></div>
+      <div class="panel-head"><div><strong>${esc(r.name || r.number)}</strong> <span class="badge mono">${esc(r.number)}</span> ${r.enabled ? '' : '<span class="badge">已停用</span>'}</div>
+        <span class="hint">${r.active}/${r.max_members} 方${r.recording ? ' · <a class="link" href="' + esc(r.recording) + '">录音</a>' : ''} ${adminTools}</span></div>
       ${rows ? `<table><thead><tr><th>分机</th><th>名称</th><th>编码</th><th>状态</th><th>加入时间</th><th>操作</th></tr></thead><tbody>${rows}</tbody></table>` : '<div class="empty" style="padding:12px 0">暂无参会者</div>'}
     </div>`;
   }).join('');
@@ -1236,7 +1306,7 @@ let currentRole = 'admin';
 
 function applyRoleUI(){
   const admin = currentRole === 'admin';
-  document.querySelectorAll('[data-admin-only]').forEach(el => { el.hidden = !admin; });
+  document.querySelectorAll('[data-admin-only]').forEach(el => { el.hidden = !admin; if(el.id === 'conference-admin') el.style.display = admin ? 'flex' : 'none'; });
   const who = $('who'); if(who) who.textContent = currentUser ? currentUser + ' · ' + currentRole : '';
   if(!admin){
     const active = document.querySelector('.tab-panel.active');

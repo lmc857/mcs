@@ -140,6 +140,22 @@
  "participants":[{"id":"...","ext":"1001","name":"值班室","muted":false,"codec":"PCMU","joined_at":"..."}]}],"total":1}
 ```
 
+### POST `/api/v1/conference/rooms`
+
+```json
+{"number":"7001","name":"会议室 2","max_members":8,"record":true}
+```
+
+### PATCH `/api/v1/conference/rooms/{number}`
+
+```json
+{"name":"会议室 2","max_members":10,"record":true,"enabled":true}
+```
+
+### DELETE `/api/v1/conference/rooms/{number}`
+
+房间有参会者时返回 400。
+
 ### POST `/api/v1/conference/{room}/participants/{id}/mute`
 
 ```json

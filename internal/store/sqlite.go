@@ -87,6 +87,15 @@ func (d *DB) migrate() error {
 		)`,
 		`CREATE TABLE IF NOT EXISTS schema_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)`,
 		`CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)`,
+		`CREATE TABLE IF NOT EXISTS conference_rooms (
+			number TEXT PRIMARY KEY,
+			name TEXT NOT NULL,
+			max_members INTEGER NOT NULL DEFAULT 8,
+			record INTEGER NOT NULL DEFAULT 1,
+			enabled INTEGER NOT NULL DEFAULT 1,
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL
+		)`,
 		`CREATE TABLE IF NOT EXISTS users (
 			username TEXT PRIMARY KEY,
 			password_hash TEXT NOT NULL,

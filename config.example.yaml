@@ -30,7 +30,8 @@ auth:
 
 # 报警策略：8000 按级别顺序振铃，超时自动升级
 conference:
-  # 电话会议：默认关闭；启用后拨房间短号进入
+  # 电话会议：房间可在网页“会议”页创建（保存到 SQLite），不一定要写这里。
+  # enabled/rooms 仅用于首次启动导入初始房间。
   enabled: false
   rooms:
     - number: "7000"

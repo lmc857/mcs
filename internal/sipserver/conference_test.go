@@ -154,3 +154,38 @@ func TestConferenceRecorderWritesWAV(t *testing.T) {
 		t.Fatalf("recording file: %v", err)
 	}
 }
+
+func TestConferenceRoomCRUD(t *testing.T) {
+	st := store.New([]config.DeviceConfig{{Ext: "1001", Password: "pass"}})
+	srv, err := New(st, NewAuthenticator("mcs", "test"), store.NewCDRStore(10), store.NewAlarmStore(10), Options{
+		Domain: "mcs.local", Advertise: "127.0.0.1:15077", DataDir: t.TempDir(),
+		Alarm: config.AlarmConfig{Number: "8000"},
+	}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := srv.CreateConferenceRoom("7000", "test", 8, false); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := srv.conference.find("7000"); !ok {
+		t.Fatal("room not found")
+	}
+	if err := srv.CreateConferenceRoom("1001", "conflict", 8, false); err == nil {
+		t.Fatal("expected extension conflict")
+	}
+	if err := srv.UpdateConferenceRoom("7000", "test2", 4, true, false); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := srv.conference.find("7000"); ok {
+		t.Fatal("disabled room should not be found")
+	}
+	if err := srv.UpdateConferenceRoom("7000", "test2", 4, true, true); err != nil {
+		t.Fatal(err)
+	}
+	if err := srv.DeleteConferenceRoom("7000"); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := srv.conference.find("7000"); ok {
+		t.Fatal("deleted room found")
+	}
+}

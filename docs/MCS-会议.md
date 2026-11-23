@@ -1,8 +1,16 @@
 # MCS 电话会议
 
-## 1. 配置
+## 1. 配置与网页创建
 
-会议默认关闭，在 `config.yaml` 启用：
+会议房间**不需要手工改 config.yaml**。管理员登录后：
+
+```text
+业务 → 会议 → 创建房间
+```
+
+填写短号、名称、方数、是否录音即可，保存到 SQLite，立即生效。
+
+`config.yaml` 中的 `conference.rooms` 只是首次启动的初始房间：
 
 ```yaml
 conference:
@@ -14,13 +22,24 @@ conference:
       record: true
 ```
 
-重启 MCS 后，话机直接拨：
+如果数据库里已经有房间，网页/数据库是唯一数据源，YAML 的 rooms 不再覆盖。
+
+> `conference.enabled` 只控制 **YAML 初始房间是否导入**；网页创建的房间不要求先在 YAML 中配置房间。没有房间时，管理员登录后直接在“会议”页创建即可。
+
+话机直接拨房间短号，例如：
 
 ```text
 7000
 ```
 
 即可加入会议。
+
+### 会议短号不是寻呼短号
+
+- 会议短号：如 `7000`，双向混音，多人互相听；
+- 广播寻呼短号：如 `5001`/`5002`，单向 RTP 扇出，终端只收不发；
+- 两者可以同时存在，但号码不能重复；
+- 会议短号也不能和分机号、报警号码 `8000` 冲突。
 
 ## 2. 当前能力
 
@@ -30,7 +49,7 @@ conference:
 - 网页会议页实时显示参与者；
 - operator/admin 可静音、取消静音、踢出；
 - 可选会议混音录音，结束后生成 WAV；
-- 会议房间由 `config.yaml` 定义；
+- 会议房间由网页创建并持久化到 SQLite；
 - 无 PIN、无主持人角色、无 WebRTC 加入、无视频。
 
 ## 3. 网页账号
@@ -49,6 +68,7 @@ conference:
 
 业务 → 会议：
 
+- 管理员：创建、编辑、启用/停用、删除房间；
 - 房间号、在线人数；
 - 参与者分机、名称、编码、加入时间；
 - 静音/取消静音、踢出；
@@ -58,6 +78,9 @@ conference:
 
 ```text
 GET  /api/v1/conference
+POST /api/v1/conference/rooms
+PATCH /api/v1/conference/rooms/{number}
+DELETE /api/v1/conference/rooms/{number}
 POST /api/v1/conference/{room}/participants/{id}/mute
 POST /api/v1/conference/{room}/participants/{id}/kick
 ```
@@ -68,7 +91,21 @@ mute：
 {"muted": true}
 ```
 
-viewer 只读；operator/admin 可操作。
+创建房间：
+
+```json
+{"number":"7001","name":"会议室 2","max_members":8,"record":true}
+```
+
+更新/停用：
+
+```json
+{"name":"会议室 2","max_members":10,"record":true,"enabled":true}
+```
+
+房间有参会者时不能删除；停用后新呼叫不再进入，已有参会者继续到结束。
+
+viewer 只读；operator/admin 可静音、取消静音、踢人；房间创建、修改、启停、删除仅 admin。
 
 ## 6. 媒体说明
 
@@ -82,6 +119,7 @@ viewer 只读；operator/admin 可操作。
 
 - 设备需要支持标准 SIP INVITE 和 PCMU/PCMA；
 - 会议号码不能和分机、广播短号、报警号码冲突；
+- 会议短号不是寻呼短号；
 - 会议通话不计入两方 CDR；
 - 当前会议没有 PIN 和主持人控制，任何能拨入的终端都可加入；
 - 生产使用建议配合网络访问控制。

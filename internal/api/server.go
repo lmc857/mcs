@@ -83,6 +83,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/registrations", s.listDevices)
 	mux.HandleFunc("GET /api/v1/calls/active", s.activeCalls)
 	mux.HandleFunc("GET /api/v1/conference", s.conferenceList)
+	mux.HandleFunc("POST /api/v1/conference/rooms", s.conferenceRoomCreate)
+	mux.HandleFunc("PATCH /api/v1/conference/rooms/{number}", s.conferenceRoomUpdate)
+	mux.HandleFunc("DELETE /api/v1/conference/rooms/{number}", s.conferenceRoomDelete)
 	mux.HandleFunc("POST /api/v1/conference/{room}/participants/{id}/kick", s.conferenceKick)
 	mux.HandleFunc("POST /api/v1/conference/{room}/participants/{id}/mute", s.conferenceMute)
 	mux.HandleFunc("POST /api/v1/intercom/{call_id}/unlock", s.intercomUnlock)
@@ -716,6 +719,51 @@ func (s *Server) conferenceList(w http.ResponseWriter, r *http.Request) {
 		rooms = []sipserver.ConferenceRoomView{}
 	}
 	writeJSON(w, 200, map[string]any{"items": rooms, "total": len(rooms)})
+}
+
+func (s *Server) conferenceRoomCreate(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Number     string `json:"number"`
+		Name       string `json:"name"`
+		MaxMembers int    `json:"max_members"`
+		Record     bool   `json:"record"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, 400, map[string]any{"code": "VALIDATION_FAILED", "message": "invalid json"})
+		return
+	}
+	if err := s.sip.CreateConferenceRoom(req.Number, req.Name, req.MaxMembers, req.Record); err != nil {
+		writeJSON(w, 400, map[string]any{"code": "VALIDATION_FAILED", "message": err.Error()})
+		return
+	}
+	writeJSON(w, 201, map[string]any{"status": "ok", "number": req.Number})
+}
+
+func (s *Server) conferenceRoomUpdate(w http.ResponseWriter, r *http.Request) {
+	number := r.PathValue("number")
+	var req struct {
+		Name       string `json:"name"`
+		MaxMembers int    `json:"max_members"`
+		Record     bool   `json:"record"`
+		Enabled    bool   `json:"enabled"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, 400, map[string]any{"code": "VALIDATION_FAILED", "message": "invalid json"})
+		return
+	}
+	if err := s.sip.UpdateConferenceRoom(number, req.Name, req.MaxMembers, req.Record, req.Enabled); err != nil {
+		writeJSON(w, 400, map[string]any{"code": "VALIDATION_FAILED", "message": err.Error()})
+		return
+	}
+	writeJSON(w, 200, map[string]any{"status": "ok"})
+}
+
+func (s *Server) conferenceRoomDelete(w http.ResponseWriter, r *http.Request) {
+	if err := s.sip.DeleteConferenceRoom(r.PathValue("number")); err != nil {
+		writeJSON(w, 400, map[string]any{"code": "VALIDATION_FAILED", "message": err.Error()})
+		return
+	}
+	writeJSON(w, 200, map[string]any{"status": "ok"})
 }
 
 func (s *Server) conferenceKick(w http.ResponseWriter, r *http.Request) {

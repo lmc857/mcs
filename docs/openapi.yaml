@@ -123,6 +123,29 @@ paths:
       summary: 会议房间与参与者
       responses:
         '200': {description: OK}
+  /api/v1/conference/rooms:
+    post:
+      tags: [conference]
+      summary: 创建会议房间（admin）
+      responses:
+        '201': {description: 已创建}
+  /api/v1/conference/rooms/{number}:
+    patch:
+      tags: [conference]
+      summary: 修改/启停会议房间（admin）
+      parameters:
+        - {name: number, in: path, required: true, schema: {type: string}}
+      responses:
+        '200': {description: OK}
+    delete:
+      tags: [conference]
+      summary: 删除空会议房间（admin）
+      parameters:
+        - {name: number, in: path, required: true, schema: {type: string}}
+      responses:
+        '200': {description: OK}
+        '400': {description: 房间仍有参会者或不存在}
+
   /api/v1/conference/{room}/participants/{id}/mute:
     post:
       tags: [conference]

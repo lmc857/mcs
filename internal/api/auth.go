@@ -102,7 +102,7 @@ func adminOnlyPath(path string) bool {
 		"/api/v1/system/restart", "/api/v1/tts/config", "/api/v1/tts/test":
 		return true
 	}
-	return strings.HasPrefix(path, "/api/v1/users")
+	return strings.HasPrefix(path, "/api/v1/users") || strings.HasPrefix(path, "/api/v1/conference/rooms")
 }
 
 func (s *Server) authMiddleware(next http.Handler) http.Handler {
