@@ -18,6 +18,7 @@
 | [系统设置](MCS-系统设置与重启.md) | 网页修改网络/监听/业务参数、重启、回滚 |
 | [用户与权限](MCS-用户与权限.md) | admin/operator/viewer、首次管理员、用户管理 |
 | [电话会议](MCS-会议.md) | 会议室配置、混音、静音/踢出、录音、API |
+| [寻呼功能用户手册](MCS-寻呼功能用户手册.pdf) | 面向值班/操作人员的 SIP 与网页寻呼使用说明 |
 | [MCS 配置参考](MCS-配置参考.md) | `config.yaml` 字段/默认值/数据目录 |
 | [部署手册](../deploy/README.md) | systemd、Windows、Linux 包、SIP TLS、HTTPS、SRTP |
 

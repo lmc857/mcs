@@ -1,0 +1,598 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>MCS 实时寻呼功能用户手册</title>
+<style>
+:root { --ink:#172033; --muted:#5c6b82; --line:#dbe4ef; --brand:#1f5eff; --soft:#f4f7fc; }
+* { box-sizing:border-box; }
+html { -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+body { margin:0; color:var(--ink); font-family:"PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif; font-size:10.6pt; line-height:1.8; background:#fff; }
+@page { size:A4; margin:17mm 16mm 18mm 16mm; }
+.cover { height:245mm; display:flex; flex-direction:column; justify-content:flex-start; padding-top:22mm; page-break-after:always; }
+.brand { display:flex; align-items:center; gap:10px; color:var(--brand); font-weight:700; letter-spacing:1px; }
+.brand .logo { width:34px; height:34px; border-radius:9px; background:linear-gradient(135deg,#1f5eff,#4d8dff); color:#fff; display:flex; align-items:center; justify-content:center; font-size:15px; letter-spacing:0; }
+.cover .kicker { margin-top:18mm; color:var(--muted); font-size:11pt; letter-spacing:2px; }
+.cover h1 { font-size:31pt; line-height:1.35; margin:5mm 0 0; letter-spacing:1px; font-weight:700; }
+.cover .rule { width:34mm; height:4px; background:var(--brand); border-radius:2px; margin:10mm 0; }
+.cover .meta { color:var(--muted); font-size:11pt; line-height:2; }
+.cover .foot { margin-top:auto; padding-top:18mm; border-top:1px solid var(--line); color:var(--muted); font-size:9.5pt; }
+.toc { page-break-after:always; padding-top:8mm; }
+.toc h2 { border:0; margin-top:0; }
+.toc ol { margin:4mm 0 0; padding-left:7mm; columns:2; column-gap:14mm; }
+.toc li { break-inside:avoid; margin:0 0 3.2mm; color:#273752; }
+.content h1 { font-size:20pt; line-height:1.35; margin:0 0 5mm; }
+.content h2 { font-size:15pt; line-height:1.4; margin:10mm 0 4mm; padding-bottom:2.5mm; border-bottom:1.5px solid var(--line); page-break-after:avoid; }
+.content h3 { font-size:11.8pt; margin:6mm 0 2.5mm; page-break-after:avoid; }
+.content p { margin:0 0 3.4mm; text-align:justify; }
+.content ul,.content ol { margin:0 0 3.8mm; padding-left:7mm; }
+.content li { margin:0 0 1.4mm; }
+.content hr { border:0; border-top:1px solid var(--line); margin:7mm 0; }
+.content blockquote { margin:4mm 0; padding:3.5mm 4.5mm; background:#f7faff; border-left:4px solid var(--brand); color:#33445d; border-radius:0 5px 5px 0; }
+.content blockquote p { margin:0; }
+.content table { width:100%; border-collapse:collapse; margin:3mm 0 5mm; font-size:9.8pt; page-break-inside:auto; }
+.content th { background:#eef4ff; color:#1f3d6b; text-align:left; font-weight:700; }
+.content th,.content td { border:1px solid var(--line); padding:2.2mm 2.6mm; vertical-align:top; }
+.content tr { page-break-inside:avoid; }
+.content code { font-family:"SFMono-Regular",Consolas,monospace; background:#f1f5fb; padding:0.4mm 1.2mm; border-radius:3px; font-size:9.4pt; }
+.content pre { background:#0f172a; color:#e8eefc; border-radius:7px; padding:3.5mm 4mm; overflow:hidden; font-size:9.2pt; line-height:1.65; page-break-inside:avoid; }
+.content pre code { background:transparent; color:inherit; padding:0; }
+.content img { display:block; max-width:100%; max-height:112mm; margin:4mm auto 2mm; border:1px solid var(--line); border-radius:6px; }
+.content em { color:var(--muted); }
+.content strong { font-weight:700; }
+.quick { background:var(--soft); border:1px solid var(--line); border-radius:8px; padding:4mm 5mm; page-break-inside:avoid; }
+.footer-note { margin-top:12mm; padding-top:4mm; border-top:1px solid var(--line); color:var(--muted); font-size:9pt; }
+@media print { .cover { height:247mm; } a { color:inherit; text-decoration:none; } }
+</style>
+</head>
+<body>
+<section class="cover">
+  <div class="brand"><span class="logo">M</span><span>MCS</span></div>
+  <div class="kicker">报警 · 对讲 · 广播融合通信服务器</div>
+  <h1>实时寻呼功能<br>用户使用说明</h1>
+  <div class="rule"></div>
+  <div class="meta">适用版本：MCS 0.8.0<br>文档版本：2026-11-23<br>适用对象：值班人员、操作员、系统管理员</div>
+  <div class="foot">本手册用于指导用户完成 SIP 话机寻呼和网页麦克风寻呼。<br>请结合实际分区配置和现场设备使用。</div>
+</section>
+<nav class="toc">
+<h2>目录</h2>
+<ol>
+<li>功能简介</li>
+<li>使用前确认</li>
+<li>用 SIP 话机寻呼</li>
+<li>用网页寻呼</li>
+<li>寻呼记录</li>
+<li>典型使用场景</li>
+<li>什么时候用寻呼，什么时候用广播</li>
+<li>管理员配置说明</li>
+<li>常见问题</li>
+<li>使用规范</li>
+<li>快速操作卡</li>
+<li>技术支持信息</li>
+</ol>
+</nav>
+
+<main class="content">
+<h2>1. 功能简介</h2>
+<p>实时寻呼是值班人员用话筒或网页麦克风，<strong>立即对指定分区讲话</strong>的功能。讲话内容实时播放到该分区的自动应答终端，挂断或点“停止”后结束。</p>
+<p>它适合：</p>
+<ul>
+<li>临时通知；</li>
+<li>现场调度；</li>
+<li>找人、挪车、巡逻提醒；</li>
+<li>安全提醒；</li>
+<li>指挥中心对指定区域喊话。</li>
+</ul>
+<p>实时寻呼是<strong>单向讲话</strong>：值班人员说话，终端播放；终端不向值班人员回话。</p>
+<p>如果需要双向通话，请使用“对讲”或“电话会议”。</p>
+<h3>1.1 三个基本要素</h3>
+<table>
+<thead>
+<tr>
+<th>要素</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>分区</td>
+<td>要讲话的区域，例如 A 区、停车场、车间</td>
+</tr>
+<tr>
+<td>自动应答终端</td>
+<td>分区内能够自动接听并播放声音的 SIP 音箱/终端</td>
+</tr>
+<tr>
+<td>操作人员</td>
+<td>使用 SIP 话机或网页麦克风发起寻呼的人</td>
+</tr>
+</tbody></table>
+<h3>1.2 三种容易混淆的业务</h3>
+<table>
+<thead>
+<tr>
+<th>业务</th>
+<th>方向</th>
+<th>内容来源</th>
+<th>典型用途</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>实时寻呼</td>
+<td>单向</td>
+<td>操作人员现场说话</td>
+<td>临时通知、现场调度</td>
+</tr>
+<tr>
+<td>TTS/音频广播</td>
+<td>单向</td>
+<td>文字合成或预存音频</td>
+<td>日常通知、定时播报</td>
+</tr>
+<tr>
+<td>电话会议</td>
+<td>双向多方</td>
+<td>多方现场说话</td>
+<td>多人讨论、会商</td>
+</tr>
+<tr>
+<td>对讲</td>
+<td>双向一对一</td>
+<td>双方现场说话</td>
+<td>门口机与值班室通话</td>
+</tr>
+</tbody></table>
+<blockquote>
+<p>寻呼不是 TTS 广播，也不是定时广播。<br>定时广播和 TTS 广播由“广播”功能完成，不需要人员一直守着话筒。</p>
+</blockquote>
+<hr>
+<h2>2. 使用前确认</h2>
+<h3>2.1 终端已在线</h3>
+<p>在“设备管理”或“广播”页面查看分区在线终端数。</p>
+<ul>
+<li>在线终端数大于 0，才能开始寻呼；</li>
+<li>如果显示 0，检查终端是否注册、是否在线、网络是否可达；</li>
+<li>普通软电话通常不会自动接听，分区终端需要支持自动应答。</li>
+</ul>
+<h3>2.2 终端支持自动应答</h3>
+<p>寻呼需要终端自动接听 MCS 发起的通话。</p>
+<ul>
+<li>自研 SIP 音箱：按 <code>Alert-Info</code> 自动应答；</li>
+<li>第三方 SIP 音箱：需要在设备里开启自动接听；</li>
+<li>普通软电话：通常会振铃，需要人工接听，不适合做寻呼终端。</li>
+</ul>
+<h3>2.3 操作人员有权限</h3>
+<table>
+<thead>
+<tr>
+<th>角色</th>
+<th>网页寻呼</th>
+<th>SIP 话机寻呼</th>
+<th>查看寻呼记录</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>admin</td>
+<td>可以</td>
+<td>可以</td>
+<td>可以</td>
+</tr>
+<tr>
+<td>operator</td>
+<td>可以</td>
+<td>可以</td>
+<td>可以</td>
+</tr>
+<tr>
+<td>viewer</td>
+<td>不可以</td>
+<td>按分机白名单</td>
+<td>可以</td>
+</tr>
+</tbody></table>
+<p>如果网页看不到“网页实时寻呼”，请确认登录角色不是 viewer。</p>
+<h3>2.4 网页寻呼需要安全上下文</h3>
+<p>浏览器只允许在以下环境使用麦克风：</p>
+<ul>
+<li><code>https://</code> 打开的控制台；</li>
+<li>本机 <code>http://127.0.0.1</code>；</li>
+<li>本机 <code>http://localhost</code>。</li>
+</ul>
+<p>如果从另一台电脑用：</p>
+<pre><code class="language-text">http://192.168.1.10:8080
+</code></pre>
+<p>打开，浏览器会禁止麦克风。请改用 HTTPS 地址。</p>
+<h3>2.5 PIN</h3>
+<p>如果管理员设置了网页寻呼 PIN，页面会出现“寻呼 PIN”输入框。</p>
+<ul>
+<li>PIN 由管理员配置和保管；</li>
+<li>输入错误会提示“寻呼 PIN 不正确”；</li>
+<li>不要把 PIN 告诉无关人员。</li>
+</ul>
+<hr>
+<h2>3. 用 SIP 话机寻呼</h2>
+<h3>3.1 操作步骤</h3>
+<ol>
+<li>拿起已注册的 SIP 话机；</li>
+<li>拨打分区寻呼短号，例如：</li>
+</ol>
+<pre><code class="language-text">5001
+</code></pre>
+<ol start="3">
+<li>听到 MCS 接听后，直接讲话；</li>
+<li>讲话结束，挂机。</li>
+</ol>
+<p>挂机后，MCS 自动停止该分区的寻呼。</p>
+<h3>3.2 分区短号在哪里看</h3>
+<p>在“广播”页面或“系统信息 → 广播分区”中查看：</p>
+<table>
+<thead>
+<tr>
+<th>分区</th>
+<th>寻呼短号</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>A 区</td>
+<td>5001</td>
+</tr>
+<tr>
+<td>全区</td>
+<td>5002</td>
+</tr>
+</tbody></table>
+<p>实际短号以现场配置为准。</p>
+<h3>3.3 注意事项</h3>
+<ul>
+<li>话筒离嘴 10～20 厘米，避免喷麦；</li>
+<li>不要对着音箱讲话，避免啸叫；</li>
+<li>讲话前先确认分区选择正确；</li>
+<li>讲完后及时挂机，避免占用分区。</li>
+</ul>
+<hr>
+<h2>4. 用网页寻呼</h2>
+<h3>4.1 操作步骤</h3>
+<ol>
+<li>登录 MCS 控制台；</li>
+<li>打开：</li>
+</ol>
+<pre><code class="language-text">业务 → 广播
+</code></pre>
+<ol start="3">
+<li>找到“网页实时寻呼”；</li>
+<li>选择目标分区；</li>
+<li>如果页面显示 PIN 输入框，输入寻呼 PIN；</li>
+<li>点击“开始网页寻呼”；</li>
+<li>浏览器询问麦克风权限时，点击“允许”；</li>
+<li>看到“正在向分区播放麦克风”后开始讲话；</li>
+<li>讲话结束，点击“停止”，或点击弹窗中的“停止”。</li>
+</ol>
+<p><img src="images/console-paging.png" alt="网页实时寻呼"></p>
+<h3>4.2 页面提示说明</h3>
+<table>
+<thead>
+<tr>
+<th>提示</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>分区忙</td>
+<td>该分区已有广播/寻呼，暂时不能开始</td>
+</tr>
+<tr>
+<td>没有在线终端</td>
+<td>分区内没有在线终端，检查设备</td>
+</tr>
+<tr>
+<td>无法打开麦克风</td>
+<td>浏览器权限被拒绝，或没有麦克风</td>
+</tr>
+<tr>
+<td>网页寻呼需要 HTTPS</td>
+<td>当前地址不是安全上下文</td>
+</tr>
+<tr>
+<td>寻呼 PIN 不正确</td>
+<td>PIN 输入错误</td>
+</tr>
+</tbody></table>
+<h3>4.3 停止寻呼</h3>
+<p>以下任一方式都会停止：</p>
+<ul>
+<li>点击页面“停止”；</li>
+<li>点击寻呼弹窗中的“停止”；</li>
+<li>关闭浏览器页面；</li>
+<li>网络中断，WebRTC 自动断开。</li>
+</ul>
+<hr>
+<h2>5. 寻呼记录</h2>
+<p>“广播”页面下方的“寻呼记录”显示最近的寻呼事件。</p>
+<p>记录内容包括：</p>
+<table>
+<thead>
+<tr>
+<th>字段</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>开始</td>
+<td>寻呼开始时间</td>
+</tr>
+<tr>
+<td>来源</td>
+<td>SIP 分机，或网页用户名</td>
+</tr>
+<tr>
+<td>分区</td>
+<td>目标分区</td>
+</tr>
+<tr>
+<td>方式</td>
+<td>SIP 或网页</td>
+</tr>
+<tr>
+<td>状态</td>
+<td>进行中 / 已结束 / 失败</td>
+</tr>
+<tr>
+<td>投递</td>
+<td>成功播放的终端数 / 总终端数</td>
+</tr>
+<tr>
+<td>结束</td>
+<td>寻呼结束时间</td>
+</tr>
+</tbody></table>
+<p>寻呼记录用于：</p>
+<ul>
+<li>确认某次通知是否真的发过；</li>
+<li>排查“终端没声音”；</li>
+<li>追溯谁在什么时候对哪个区域讲话；</li>
+<li>统计终端在线和投递情况。</li>
+</ul>
+<blockquote>
+<p>寻呼记录是操作记录，不包含寻呼录音。</p>
+</blockquote>
+<hr>
+<h2>6. 典型使用场景</h2>
+<h3>6.1 小区/物业</h3>
+<ul>
+<li>门岗通知某车主挪车；</li>
+<li>巡逻人员调度；</li>
+<li>消防通道占用提醒；</li>
+<li>地下车库异常提醒。</li>
+</ul>
+<h3>6.2 工厂/车间</h3>
+<ul>
+<li>生产调度；</li>
+<li>换班提醒；</li>
+<li>仓库找货；</li>
+<li>危险区域安全喊话；</li>
+<li>设备异常通知。</li>
+</ul>
+<h3>6.3 学校</h3>
+<ul>
+<li>操场、楼层临时通知；</li>
+<li>后勤调度；</li>
+<li>考试期间区域提醒；</li>
+<li>放学/活动安排。</li>
+</ul>
+<h3>6.4 医院</h3>
+<ul>
+<li>护士站找医生；</li>
+<li>病区临时通知；</li>
+<li>急诊调度；</li>
+<li>后勤保障。</li>
+</ul>
+<h3>6.5 酒店/商场</h3>
+<ul>
+<li>找员工；</li>
+<li>找顾客；</li>
+<li>楼层通知；</li>
+<li>清场提醒；</li>
+<li>后勤调度。</li>
+</ul>
+<h3>6.6 园区/工地</h3>
+<ul>
+<li>门口喊话；</li>
+<li>塔吊/施工区域提醒；</li>
+<li>访客车辆引导；</li>
+<li>安全警告。</li>
+</ul>
+<h3>6.7 指挥中心</h3>
+<ul>
+<li>值班员对指定区域实时喊话；</li>
+<li>配合报警事件进行现场确认；</li>
+<li>大型活动调度。</li>
+</ul>
+<hr>
+<h2>7. 什么时候用寻呼，什么时候用广播</h2>
+<table>
+<thead>
+<tr>
+<th>需求</th>
+<th>建议功能</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>现在马上通知某区域一件事</td>
+<td>实时寻呼</td>
+</tr>
+<tr>
+<td>播放一段固定通知</td>
+<td>TTS 广播</td>
+</tr>
+<tr>
+<td>每天早上 8 点自动播放</td>
+<td>定时广播</td>
+</tr>
+<tr>
+<td>播放一首背景音乐</td>
+<td>音频广播</td>
+</tr>
+<tr>
+<td>两个区域互相对话</td>
+<td>对讲</td>
+</tr>
+<tr>
+<td>多人一起开会</td>
+<td>电话会议</td>
+</tr>
+<tr>
+<td>火灾等生命安全场景</td>
+<td>专用应急广播/消防联动，不应只依赖普通寻呼</td>
+</tr>
+</tbody></table>
+<blockquote>
+<p>寻呼适合“人现在要说话”，不适合“到点自动播放”。<br>定时广播、TTS 广播请使用广播功能。</p>
+</blockquote>
+<hr>
+<h2>8. 管理员配置说明</h2>
+<p>以下配置由管理员在服务器上完成，普通用户不需要修改。</p>
+<pre><code class="language-yaml">paging:
+  enabled: true
+
+  # 网页寻呼 PIN；留空表示不校验
+  pin: &quot;1234&quot;
+
+  # 允许发起 SIP 寻呼的分机；留空表示不限制
+  allowed_exts: [&quot;2010&quot;, &quot;2011&quot;]
+</code></pre>
+<p>配置说明：</p>
+<table>
+<thead>
+<tr>
+<th>配置</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>enabled</code></td>
+<td>是否启用寻呼；<code>false</code> 同时关闭 SIP 和网页寻呼</td>
+</tr>
+<tr>
+<td><code>pin</code></td>
+<td>网页寻呼 PIN；只对网页寻呼生效</td>
+</tr>
+<tr>
+<td><code>allowed_exts</code></td>
+<td>SIP 寻呼分机白名单；留空不限制</td>
+</tr>
+</tbody></table>
+<p>修改配置后需要重启 MCS。</p>
+<blockquote>
+<p>SIP 寻呼的 <code>allowed_exts</code> 是按主叫分机号做白名单，属于访问控制，不是 SIP Digest 密码认证。生产环境建议同时通过 VLAN、ACL 或防火墙限制能访问 MCS 的 SIP 终端。</p>
+</blockquote>
+<hr>
+<h2>9. 常见问题</h2>
+<h3>9.1 拨 5001 后没有声音</h3>
+<p>检查：</p>
+<ol>
+<li>分区内终端是否在线；</li>
+<li>终端是否支持自动应答；</li>
+<li>终端音量是否被调为 0；</li>
+<li>终端和 MCS 之间 RTP 端口是否被防火墙拦截；</li>
+<li>是否拨错分区短号。</li>
+</ol>
+<h3>9.2 网页提示“没有在线终端”</h3>
+<p>分区内没有已注册且在线的终端。先到“设备管理”检查终端状态。</p>
+<h3>9.3 网页提示“分区忙”</h3>
+<p>该分区已有广播或寻呼。等待当前广播结束，或先停止当前广播。</p>
+<h3>9.4 浏览器无法打开麦克风</h3>
+<ul>
+<li>检查地址是否为 HTTPS 或本机 <code>127.0.0.1/localhost</code>；</li>
+<li>检查浏览器地址栏的麦克风权限；</li>
+<li>检查系统是否允许浏览器使用麦克风；</li>
+<li>关闭占用麦克风的其他软件。</li>
+</ul>
+<h3>9.5 网页寻呼按钮不显示</h3>
+<ul>
+<li>当前账号是 viewer，只读；</li>
+<li>使用 admin 或 operator 登录；</li>
+<li>页面是旧缓存，按 <code>Ctrl + F5</code>。</li>
+</ul>
+<h3>9.6 PIN 输入后仍然失败</h3>
+<ul>
+<li>确认 PIN 与管理员配置一致；</li>
+<li>确认没有多余空格；</li>
+<li>连续失败请联系管理员。</li>
+</ul>
+<h3>9.7 有寻呼记录，但现场没听到</h3>
+<p>查看记录中的“投递”：</p>
+<ul>
+<li><code>0/N</code>：没有终端成功接收，检查在线状态和自动应答；</li>
+<li>部分成功：检查未成功终端；</li>
+<li>全部成功：检查终端音量、扬声器、现场环境。</li>
+</ul>
+<h3>9.8 讲话时有回声/啸叫</h3>
+<ul>
+<li>不要对着正在播放的音箱讲话；</li>
+<li>使用话机手柄或耳机；</li>
+<li>降低终端音量；</li>
+<li>让话筒远离音箱。</li>
+</ul>
+<h3>9.9 寻呼突然结束</h3>
+<p>可能原因：</p>
+<ul>
+<li>操作人员挂机或点了停止；</li>
+<li>网络断开；</li>
+<li>分区广播被更高优先级任务抢占；</li>
+<li>终端全部离线，广播会话结束。</li>
+</ul>
+<hr>
+<h2>10. 使用规范</h2>
+<ol>
+<li>讲话前确认分区，避免误播到其他区域；</li>
+<li>先说明身份和事项，再讲具体内容；</li>
+<li>内容简短、清晰，避免长时间占用分区；</li>
+<li>不要在寻呼中播报密码、身份证号等敏感信息；</li>
+<li>不要在音箱附近讲话，避免啸叫；</li>
+<li>寻呼结束后及时挂机或点停止；</li>
+<li>紧急场景应使用专用应急广播流程，不要只依赖普通寻呼；</li>
+<li>PIN 只发给授权人员，定期更换；</li>
+<li>发现终端离线或投递失败，及时报修；</li>
+<li>定期查看寻呼记录，确认设备可用。</li>
+</ol>
+<hr>
+<h2>11. 快速操作卡</h2>
+<h3>SIP 话机</h3>
+<pre><code class="language-text">摘机 → 拨 5001 → 讲话 → 挂机
+</code></pre>
+<h3>网页</h3>
+<pre><code class="language-text">业务 → 广播 → 网页实时寻呼
+→ 选分区
+→ 输入 PIN（如有）
+→ 开始网页寻呼
+→ 允许麦克风
+→ 讲话
+→ 停止
+</code></pre>
+<h3>查看记录</h3>
+<pre><code class="language-text">业务 → 广播 → 寻呼记录
+</code></pre>
+<h3>管理员配置</h3>
+<pre><code class="language-yaml">paging:
+  enabled: true
+  pin: &quot;1234&quot;
+  allowed_exts: [&quot;2010&quot;, &quot;2011&quot;]
+</code></pre>
+<hr>
+<h2>12. 技术支持信息</h2>
+<p>提交问题时，请提供：</p>
+<ul>
+<li>MCS 版本；</li>
+<li>操作时间；</li>
+<li>分区名称/短号；</li>
+<li>操作方式（SIP 话机/网页）；</li>
+<li>页面提示或错误信息；</li>
+<li>寻呼记录中的状态和投递数；</li>
+<li>相关终端型号和在线状态。</li>
+</ul>
+<hr>
+<p><strong>MCS · 报警 / 对讲 / 广播融合通信服务器</strong><br><strong>文档结束</strong></p>
+
+<div class="footer-note">MCS · 报警 / 对讲 / 广播融合通信服务器 · 实时寻呼功能用户手册</div>
+</main>
+</body>
+</html>
