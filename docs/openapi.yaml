@@ -117,6 +117,33 @@ paths:
       responses:
         '200': {description: OK}
 
+  /api/v1/paging:
+    get:
+      tags: [paging]
+      summary: 寻呼配置
+      responses:
+        '200': {description: OK}
+  /api/v1/paging/webrtc:
+    post:
+      tags: [paging]
+      summary: 网页麦克风寻呼
+      responses:
+        '200': {description: 返回 SDP answer 和寻呼 id}
+  /api/v1/paging/{id}/stop:
+    post:
+      tags: [paging]
+      summary: 停止网页寻呼
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      responses:
+        '200': {description: OK}
+  /api/v1/paging/events:
+    get:
+      tags: [paging]
+      summary: 寻呼记录
+      responses:
+        '200': {description: OK}
+
   /api/v1/conference:
     get:
       tags: [conference]

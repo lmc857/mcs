@@ -104,6 +104,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("DELETE /api/v1/broadcast/schedules/{id}", s.scheduleDelete)
 	mux.HandleFunc("POST /api/v1/broadcast/start", s.broadcastStart)
 	mux.HandleFunc("POST /api/v1/broadcast/stop", s.broadcastStop)
+	mux.HandleFunc("GET /api/v1/paging", s.pagingInfo)
+	mux.HandleFunc("GET /api/v1/paging/events", s.pagingEvents)
+	mux.HandleFunc("POST /api/v1/paging/webrtc", s.pagingWebRTC)
+	mux.HandleFunc("POST /api/v1/paging/{id}/stop", s.pagingStop)
 	mux.HandleFunc("GET /api/v1/media", s.mediaList)
 	mux.HandleFunc("POST /api/v1/media", s.mediaUpload)
 	mux.HandleFunc("DELETE /api/v1/media/{id}", s.mediaDelete)
@@ -712,6 +716,54 @@ func mustUDPAddr(addr string) *net.UDPAddr {
 		return &net.UDPAddr{}
 	}
 	return a
+}
+
+func (s *Server) pagingInfo(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, 200, s.sip.PagingInfo())
+}
+
+func (s *Server) pagingEvents(w http.ResponseWriter, r *http.Request) {
+	limit := 50
+	if v := r.URL.Query().Get("limit"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			limit = n
+		}
+	}
+	events := s.sip.PagingEvents(limit)
+	if events == nil {
+		events = []store.PagingEvent{}
+	}
+	writeJSON(w, 200, map[string]any{"items": events, "total": len(events)})
+}
+
+func (s *Server) pagingWebRTC(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		ZoneID string `json:"zone_id"`
+		PIN    string `json:"pin"`
+		SDP    string `json:"sdp"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || strings.TrimSpace(req.ZoneID) == "" || strings.TrimSpace(req.SDP) == "" {
+		writeJSON(w, 400, map[string]any{"code": "VALIDATION_FAILED", "message": "zone_id and sdp required"})
+		return
+	}
+	user := "operator"
+	if sess, ok := s.sessionFor(r); ok && sess.username != "" {
+		user = sess.username
+	}
+	answer, id, err := s.sip.HandlePagingWebRTC(r.Context(), req.ZoneID, user, req.PIN, req.SDP)
+	if err != nil {
+		writeJSON(w, 400, map[string]any{"code": "PAGING_FAILED", "message": err.Error()})
+		return
+	}
+	writeJSON(w, 200, map[string]any{"sdp": answer, "id": id})
+}
+
+func (s *Server) pagingStop(w http.ResponseWriter, r *http.Request) {
+	if err := s.sip.PagingStop(r.PathValue("id")); err != nil {
+		writeJSON(w, 404, map[string]any{"code": "NOT_FOUND", "message": err.Error()})
+		return
+	}
+	writeJSON(w, 200, map[string]any{"status": "ok"})
 }
 
 func (s *Server) conferenceList(w http.ResponseWriter, r *http.Request) {

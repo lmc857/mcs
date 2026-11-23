@@ -4,26 +4,45 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/emiago/sipgo"
 	"github.com/emiago/sipgo/sip"
+	"github.com/pion/webrtc/v4"
+
+	"mcs/internal/store"
 )
 
 type pagingSession struct {
-	id     string
-	zoneID string
-	dss    *sipgo.DialogServerSession
-	conn   *net.UDPConn
-	bc     *broadcastSession
-	srcIP  net.IP
-	byeCh  chan struct{}
-	once   sync.Once
-	server *Server
+	id         string
+	zoneID     string
+	dss        *sipgo.DialogServerSession
+	conn       *net.UDPConn
+	bc         *broadcastSession
+	srcIP      net.IP
+	source     string
+	sourceName string
+	kind       string
+	webPC      *webrtc.PeerConnection
+	startedAt  time.Time
+	byeCh      chan struct{}
+	once       sync.Once
+	server     *Server
 }
 
 func (s *Server) handlePagingInvite(req *sip.Request, tx sip.ServerTransaction, z zone) {
+	if !s.pagingCfg.Enabled {
+		s.respond(req, tx, 480, "Temporarily Unavailable")
+		return
+	}
+	caller := pagingCaller(req)
+	if !s.pagingAllowed(caller) {
+		s.log.Warn("paging forbidden", "zone", z.id, "ext", caller)
+		s.respond(req, tx, 403, "Forbidden")
+		return
+	}
 	body := req.Body()
 	if len(body) == 0 {
 		s.respond(req, tx, 488, "Not Acceptable Here")
@@ -61,9 +80,11 @@ func (s *Server) handlePagingInvite(req *sip.Request, tx sip.ServerTransaction, 
 	}
 	ps := &pagingSession{
 		id: dss.InviteRequest.CallID().Value(), zoneID: z.id, dss: dss, conn: conn,
-		bc: bc, srcIP: srcIP, byeCh: make(chan struct{}), server: s,
+		bc: bc, srcIP: srcIP, source: caller, sourceName: pagingSourceName(s.store, caller),
+		kind: "sip", startedAt: time.Now(), byeCh: make(chan struct{}), server: s,
 	}
 	s.pagingAdd(ps)
+	s.pagingRecordStart(ps)
 	_ = dss.Respond(100, "Trying", nil)
 	go ps.readRTP()
 
@@ -145,12 +166,83 @@ func decodeALawBytes(payload []byte) []int16 {
 func (p *pagingSession) stop() {
 	p.once.Do(func() {
 		close(p.byeCh)
-		_ = p.conn.Close()
+		if p.conn != nil {
+			_ = p.conn.Close()
+		}
+		if p.webPC != nil {
+			_ = p.webPC.Close()
+		}
 		p.server.pagingRemove(p.id)
 		if p.bc != nil {
 			p.bc.stop("stopped")
 		}
+		p.server.pagingRecordFinish(p)
 	})
+}
+
+func pagingCaller(req *sip.Request) string {
+	if f := req.From(); f != nil && f.Address.User != "" {
+		return f.Address.User
+	}
+	return aor(req)
+}
+
+func pagingSourceName(st *store.Store, ext string) string {
+	if st != nil {
+		if v, ok := st.Get(ext); ok && v.Name != "" {
+			return v.Name
+		}
+	}
+	return ext
+}
+
+func (s *Server) pagingAllowed(ext string) bool {
+	if len(s.pagingCfg.AllowedExts) == 0 {
+		return true
+	}
+	for _, allowed := range s.pagingCfg.AllowedExts {
+		if strings.TrimSpace(allowed) == ext {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *Server) pagingRecordStart(p *pagingSession) {
+	if s.store == nil {
+		return
+	}
+	z := s.zoneByID(p.zoneID)
+	_ = s.store.SavePagingEvent(store.PagingEvent{
+		ID: p.id, Source: p.source, SourceName: p.sourceName, ZoneID: p.zoneID, ZoneName: z.name,
+		Kind: p.kind, StartedAt: p.startedAt.Format(time.RFC3339), Status: "active",
+	})
+}
+
+func (s *Server) pagingRecordFinish(p *pagingSession) {
+	if s.store == nil {
+		return
+	}
+	delivered, total := 0, 0
+	if p.bc != nil {
+		v := p.bc.view()
+		delivered, total = v.Delivered, v.Total
+	}
+	z := s.zoneByID(p.zoneID)
+	_ = s.store.SavePagingEvent(store.PagingEvent{
+		ID: p.id, Source: p.source, SourceName: p.sourceName, ZoneID: p.zoneID, ZoneName: z.name,
+		Kind: p.kind, StartedAt: p.startedAt.Format(time.RFC3339), EndedAt: time.Now().Format(time.RFC3339),
+		Status: "stopped", Delivered: delivered, Total: total,
+	})
+}
+
+func (s *Server) zoneByID(id string) zone {
+	for _, z := range s.zones {
+		if z.id == id {
+			return z
+		}
+	}
+	return zone{id: id}
 }
 
 func (s *Server) pagingAdd(p *pagingSession) {

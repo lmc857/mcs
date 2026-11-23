@@ -40,7 +40,8 @@ func isDashboardPoll(r *http.Request) bool {
 	}
 	switch r.URL.Path {
 	case "/api/v1/devices", "/api/v1/calls/active", "/api/v1/cdr",
-		"/api/v1/alarms", "/api/v1/broadcast/active", "/api/v1/conference":
+		"/api/v1/alarms", "/api/v1/broadcast/active", "/api/v1/conference",
+		"/api/v1/paging", "/api/v1/paging/events":
 		return true
 	}
 	return false

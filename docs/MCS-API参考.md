@@ -131,6 +131,38 @@
 
 失败 `502 TTS_FAILED`。
 
+## 2.5 实时寻呼
+
+### GET `/api/v1/paging`
+
+返回：
+
+```json
+{"enabled":true,"pin_required":false}
+```
+
+### POST `/api/v1/paging/webrtc`
+
+```json
+{"zone_id":"a","pin":"","sdp":"v=0..."}
+```
+
+返回：
+
+```json
+{"sdp":"...","id":"page-web-..."}
+```
+
+需要 operator/admin；网页麦克风寻呼。
+
+### POST `/api/v1/paging/{id}/stop`
+
+停止网页寻呼。
+
+### GET `/api/v1/paging/events?limit=50`
+
+返回 SIP/网页寻呼记录，含来源、分区、开始/结束、状态、投递数。
+
 ## 2.5.1 电话会议
 
 ### GET `/api/v1/conference`

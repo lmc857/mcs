@@ -41,6 +41,7 @@ type Server struct {
 	hbMu            sync.Mutex
 	hbFailures      map[string]int
 	broadcastCfg    config.BroadcastConfig
+	pagingCfg       config.PagingConfig
 	mediaTranscode  bool
 	zones           []zone
 	ttsMu           sync.RWMutex
@@ -64,6 +65,7 @@ type Options struct {
 	Alarm        config.AlarmConfig
 	Registration config.RegistrationConfig
 	Broadcast    config.BroadcastConfig
+	Paging       config.PagingConfig
 	Conference   config.ConferenceConfig
 	Media        config.MediaConfig
 	TTS          config.TTSConfig
@@ -96,6 +98,7 @@ func New(st *store.Store, auth *Authenticator, cdr *store.CDRStore, alarms *stor
 			Scheme: "sip", User: "mcs", Host: advHost, Port: advPort,
 		}},
 	}
+	pagingCfg := opts.Paging
 	s := &Server{
 		ua: ua, srv: srv, client: client, dua: dua, store: st, auth: auth,
 		log: log, domain: opts.Domain, advertise: opts.Advertise, advertiseHost: advHost,
@@ -103,6 +106,7 @@ func New(st *store.Store, auth *Authenticator, cdr *store.CDRStore, alarms *stor
 		registrationCfg: opts.Registration,
 		hbFailures:      map[string]int{},
 		broadcastCfg:    opts.Broadcast,
+		pagingCfg:       pagingCfg,
 		mediaTranscode:  opts.Media.Transcode,
 		zones:           buildZones(opts.Zones, st),
 		ttsCfg:          opts.TTS,

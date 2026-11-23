@@ -29,6 +29,14 @@ auth:
   console_password: ""   # 非空则启用控制台登录（Cookie 会话）
 
 # 报警策略：8000 按级别顺序振铃，超时自动升级
+paging:
+  # 实时寻呼：SIP 话机拨分区短号，或网页麦克风发起
+  enabled: true
+  # 网页寻呼 PIN；留空表示不校验。SIP 寻呼请用 allowed_exts 限制。
+  pin: ""
+  # 允许发起 SIP 寻呼的分机；留空表示不限制
+  allowed_exts: []
+
 conference:
   # 电话会议：房间可在网页“会议”页创建（保存到 SQLite），不一定要写这里。
   # enabled/rooms 仅用于首次启动导入初始房间。

@@ -16,6 +16,7 @@ type Config struct {
 	Alarm        AlarmConfig        `yaml:"alarm"`
 	Registration RegistrationConfig `yaml:"registration"`
 	Broadcast    BroadcastConfig    `yaml:"broadcast"`
+	Paging       PagingConfig       `yaml:"paging"`
 	Conference   ConferenceConfig   `yaml:"conference"`
 	Media        MediaConfig        `yaml:"media"`
 	TTS          TTSConfig          `yaml:"tts"`
@@ -83,6 +84,12 @@ type ConferenceRoomConfig struct {
 	Record     bool   `yaml:"record"`
 }
 
+type PagingConfig struct {
+	Enabled     bool     `yaml:"enabled"`
+	PIN         string   `yaml:"pin"`
+	AllowedExts []string `yaml:"allowed_exts"`
+}
+
 type BroadcastConfig struct {
 	AutoAnswer     string `yaml:"auto_answer"`
 	InviteTimeoutS int    `yaml:"invite_timeout_s"`
@@ -141,6 +148,7 @@ func defaults() Config {
 			InviteTimeoutS: 5,
 			MaxConcurrency: 16,
 		},
+		Paging: PagingConfig{Enabled: true},
 		TTS: TTSConfig{
 			Provider: "openai",
 			BaseURL:  "http://127.0.0.1:8399",
@@ -237,6 +245,9 @@ func Load(path string) (Config, error) {
 		if r.MaxMembers > 16 {
 			r.MaxMembers = 16
 		}
+	}
+	if cfg.Paging.PIN != "" {
+		cfg.Paging.PIN = strings.TrimSpace(cfg.Paging.PIN)
 	}
 	if cfg.Broadcast.AutoAnswer == "" {
 		cfg.Broadcast.AutoAnswer = "<http://127.0.0.1>;info=alert-autoanswer"

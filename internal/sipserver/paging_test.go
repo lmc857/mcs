@@ -27,7 +27,8 @@ func TestLivePagingToZone(t *testing.T) {
 	})
 	srv, err := New(st, NewAuthenticator("mcs", "test"), store.NewCDRStore(10), store.NewAlarmStore(10), Options{
 		Domain: "mcs.local", Advertise: fmt.Sprintf("127.0.0.1:%d", mcsPort), DataDir: t.TempDir(),
-		Alarm: config.AlarmConfig{Number: "8000"},
+		Alarm:  config.AlarmConfig{Number: "8000"},
+		Paging: config.PagingConfig{Enabled: true},
 		Broadcast: config.BroadcastConfig{
 			AutoAnswer: "<http://127.0.0.1>;info=alert-autoanswer", InviteTimeoutS: 3, MaxConcurrency: 4,
 		},

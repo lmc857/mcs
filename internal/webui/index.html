@@ -166,6 +166,13 @@ textarea.bc-text{margin:0 17px 12px;width:calc(100% - 34px)}
   </div>
 </div>
 
+<div id="paging-modal" class="modal" hidden>
+  <div class="modal-card" style="width:min(360px,94vw);padding:20px">
+    <div class="modal-head"><strong>网页寻呼</strong><button class="test-btn" onclick="stopWebPaging()">停止</button></div>
+    <div id="paging-modal-status" class="section-desc" style="margin:8px 0 0">正在连接…</div>
+  </div>
+</div>
+
 <div id="conf-webrtc-modal" class="modal" hidden>
   <div class="modal-card">
     <div class="modal-head"><strong>网页加入会议</strong><button class="test-btn" onclick="leaveConferenceWebRTC()">关闭</button></div>
@@ -340,6 +347,26 @@ textarea.bc-text{margin:0 17px 12px;width:calc(100% - 34px)}
             <thead><tr><th>分区</th><th>状态</th><th>投递</th><th>内容</th><th>开始时间</th></tr></thead>
             <tbody id="bc-body"><tr><td colspan="5" class="empty">当前没有广播</td></tr></tbody>
           </table>
+        </div>
+        <div class="panel" data-operator-only>
+          <div class="panel-head"><h2>网页实时寻呼</h2><span class="hint">麦克风 → 分区自动应答终端</span></div>
+          <div class="form">
+            <select id="page-zone"></select>
+            <input type="password" id="page-pin" placeholder="寻呼 PIN（如已设置）" style="flex:0 1 160px" hidden>
+            <button class="btn btn-primary" onclick="startWebPaging()">开始网页寻呼</button>
+            <button class="btn btn-danger" onclick="stopWebPaging()">停止</button>
+            <span class="hint" id="page-msg"></span>
+          </div>
+          <div class="form-note">网页寻呼需要 HTTPS 或本机 127.0.0.1/localhost；只向分区终端单向播放，不录音。SIP 话机仍可直接拨分区短号寻呼。</div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h2>寻呼记录</h2><span class="hint">最近 20 条</span></div>
+          <div class="table-wrap" style="padding:0 17px 16px">
+            <table>
+              <thead><tr><th>开始</th><th>来源</th><th>分区</th><th>方式</th><th>状态</th><th>投递</th><th>结束</th></tr></thead>
+              <tbody id="paging-body"><tr><td colspan="7" class="empty">还没有寻呼记录</td></tr></tbody>
+            </table>
+          </div>
         </div>
       </section>
 
@@ -1002,7 +1029,115 @@ async function loadZones(){
     const szCur = sz.value;
     sz.innerHTML = (data.items || []).map(z => `<option value="${esc(z.id)}">${esc(z.name)}${z.dial ? ' · ' + z.dial : ''}</option>`).join('');
     if(szCur) sz.value = szCur;
+    const pz = $('page-zone');
+    if(pz){
+      const pzCur = pz.value;
+      pz.innerHTML = (data.items || []).map(z => `<option value="${esc(z.id)}">${esc(z.name)}${z.dial ? ' · 拨 ' + z.dial : ''}</option>`).join('');
+      if(pzCur) pz.value = pzCur;
+      if(!(data.items || []).length) pz.innerHTML = '<option value="">无可用分区</option>';
+    }
   }catch(e){}
+}
+
+let pagingInfo = {enabled:false, pin_required:false};
+let pagePC = null, pageStream = null, pageID = null;
+
+async function loadPagingInfo(){
+  try{
+    pagingInfo = await getJSON('/api/v1/paging');
+    const pin = $('page-pin');
+    if(pin) pin.hidden = !pagingInfo.pin_required;
+    const msg = $('page-msg');
+    if(msg && !pagingInfo.enabled) msg.textContent = '网页寻呼未启用（config.yaml paging.enabled）';
+  }catch(e){}
+}
+
+function preferPagingCodecs(pc){
+  const caps = RTCRtpSender.getCapabilities ? RTCRtpSender.getCapabilities('audio') : null;
+  if(!caps) return;
+  const prefs = caps.codecs.filter(c => /PCMU|PCMA/i.test(c.mimeType));
+  if(!prefs.length) return;
+  pc.getTransceivers().forEach(tr => { if(tr.sender && tr.sender.track) tr.setCodecPreferences(prefs); });
+}
+
+async function startWebPaging(){
+  if(!navigator.mediaDevices || !window.RTCPeerConnection){ alert('当前浏览器不支持 WebRTC'); return; }
+  if(!window.isSecureContext){ alert('网页寻呼需要 HTTPS，或在本机使用 http://127.0.0.1 / localhost 打开。'); return; }
+  if(!pagingInfo.enabled){ $('page-msg').textContent = '网页寻呼未启用'; return; }
+  const zone = $('page-zone').value;
+  const pin = $('page-pin').value;
+  if(!zone){ $('page-msg').textContent = '没有可用分区'; return; }
+  if(pagingInfo.pin_required && !pin){ $('page-msg').textContent = '请输入寻呼 PIN'; return; }
+  $('page-msg').textContent = '正在请求麦克风…';
+  try{
+    pageStream = await navigator.mediaDevices.getUserMedia({audio:true});
+  }catch(e){ $('page-msg').textContent = '无法打开麦克风：' + e.message; return; }
+  const pc = new RTCPeerConnection({iceServers: []});
+  pagePC = pc;
+  const track = pageStream.getAudioTracks()[0];
+  pc.addTransceiver(track, {direction:'sendonly'});
+  preferPagingCodecs(pc);
+  pc.onconnectionstatechange = () => {
+    const st = pc.connectionState;
+    $('paging-modal-status').textContent = 'WebRTC：' + st;
+    if(st === 'failed' || st === 'closed') stopWebPaging();
+  };
+  try{
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    const res = await fetch('/api/v1/paging/webrtc', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({zone_id:zone, pin, sdp:offer.sdp})
+    });
+    const d = await res.json().catch(() => ({}));
+    if(!res.ok) throw new Error(d.message || ('HTTP ' + res.status));
+    await pc.setRemoteDescription({type:'answer', sdp:d.sdp});
+    pageID = d.id;
+    $('paging-modal').hidden = false;
+    $('paging-modal-status').textContent = '正在向分区播放麦克风，停止请点“停止”。';
+    $('page-msg').textContent = '正在寻呼：' + zone;
+    refresh();
+  }catch(e){
+    $('page-msg').textContent = '网页寻呼失败：' + e.message;
+    stopWebPaging();
+  }
+}
+
+async function stopWebPaging(){
+  const id = pageID;
+  pageID = null;
+  if(id){
+    try{ await fetch('/api/v1/paging/' + encodeURIComponent(id) + '/stop', {method:'POST'}); }catch(e){}
+  }
+  if(pagePC){ try{ pagePC.close(); }catch(e){} pagePC = null; }
+  if(pageStream){ pageStream.getTracks().forEach(t => t.stop()); pageStream = null; }
+  if($('paging-modal')) $('paging-modal').hidden = true;
+  if($('page-msg')) $('page-msg').textContent = '';
+  refresh();
+}
+
+function renderPagingEvents(data){
+  const tbody = $('paging-body');
+  if(!tbody) return;
+  const items = data.items || [];
+  if(!items.length){
+    tbody.innerHTML = '<tr><td colspan="7" class="empty">还没有寻呼记录</td></tr>';
+    return;
+  }
+  tbody.innerHTML = items.map(e => {
+    const kind = e.kind === 'web' ? '网页' : 'SIP';
+    const status = {active:'进行中',stopped:'已结束',failed:'失败'}[e.status] || e.status || '—';
+    const source = e.source_name ? esc(e.source_name) + (e.source ? ' (' + esc(e.source) + ')' : '') : esc(e.source || '—');
+    return `<tr>
+      <td class="badge">${time(e.started_at)}</td>
+      <td>${source}</td>
+      <td>${esc(e.zone_name || e.zone_id || '—')}</td>
+      <td class="badge">${kind}</td>
+      <td class="badge">${status}</td>
+      <td class="badge">${e.delivered || 0}/${e.total || 0}</td>
+      <td class="badge">${time(e.ended_at)}</td>
+    </tr>`;
+  }).join('');
 }
 
 async function startBroadcast(){
@@ -1174,13 +1309,14 @@ function renderCDR(data){
 let refreshFailures = 0;
 async function refresh(){
   try{
-    const [devices, calls, cdr, alarms, bc, conference] = await Promise.all([
+    const [devices, calls, cdr, alarms, bc, conference, paging] = await Promise.all([
       getJSON('/api/v1/devices'),
       getJSON('/api/v1/calls/active'),
       getJSON('/api/v1/cdr?limit=20'),
       getJSON('/api/v1/alarms?limit=20'),
       getJSON('/api/v1/broadcast/active'),
       getJSON('/api/v1/conference'),
+      getJSON('/api/v1/paging/events?limit=20'),
     ]);
     refreshFailures = 0;
     $('err').style.display = 'none';
@@ -1190,6 +1326,7 @@ async function refresh(){
     renderAlarms(alarms);
     renderBroadcast(bc);
     renderConference(conference);
+    renderPagingEvents(paging);
     $('updated').textContent = '更新于 ' + new Date().toLocaleTimeString('zh-CN', {hour12:false});
   }catch(e){
     refreshFailures++;
@@ -1242,6 +1379,7 @@ function startApp(){
   if(appStarted) return;
   appStarted = true;
   loadZones();
+  loadPagingInfo();
   loadMedia();
   loadSchedules();
   loadServerSettings();
@@ -1387,6 +1525,7 @@ let currentRole = 'admin';
 function applyRoleUI(){
   const admin = currentRole === 'admin';
   document.querySelectorAll('[data-admin-only]').forEach(el => { el.hidden = !admin; if(el.id === 'conference-admin') el.style.display = admin ? 'flex' : 'none'; });
+  document.querySelectorAll('[data-operator-only]').forEach(el => { el.hidden = currentRole === 'viewer' || !currentRole; });
   const who = $('who'); if(who) who.textContent = currentUser ? currentUser + ' · ' + currentRole : '';
   if(!admin){
     const active = document.querySelector('.tab-panel.active');
