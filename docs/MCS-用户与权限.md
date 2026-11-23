@@ -37,7 +37,7 @@ role     = admin
 Windows 默认：
 
 ```text
-C:\ProgramData\MCS\initial-admin.txt
+C:\ProgramData\MCS\data\initial-admin.txt
 ```
 
 文件内容包含用户名和临时密码。请登录后立即改密并删除该文件。
@@ -116,7 +116,7 @@ POST /api/v1/logout
 Windows 默认：
 
 ```text
-C:\ProgramData\MCS\initial-admin.txt
+C:\ProgramData\MCS\data\initial-admin.txt
 ```
 
 4. 账号密码登录后 401 会消失；
