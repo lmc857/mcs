@@ -167,6 +167,8 @@ admin · admin    退出
 
 ## 5. 设备管理
 
+![设备管理](images/console-devices.png)
+
 ### 5.1 添加设备
 
 进入：
@@ -248,6 +250,8 @@ MCS 按注册租期判断在线：
 
 ## 6. 报警
 
+![报警事件](images/console-alarms.png)
+
 ### 6.1 报警流程
 
 典型流程：
@@ -305,6 +309,8 @@ alarm:
 ---
 
 ## 7. 通话与对讲
+
+![通话与对讲](images/console-calls.png)
 
 ### 7.1 点对点通话
 
@@ -390,6 +396,8 @@ http://设备IP/snapshot.jpg
 ```text
 业务 → 广播
 ```
+
+![广播页面](images/console-broadcast.png)
 
 ### 8.1 TTS 广播
 
@@ -489,6 +497,8 @@ TTS 服务在：
 
 ### 8.5 定时任务
 
+![定时任务](images/console-schedules.png)
+
 进入：
 
 ```text
@@ -527,6 +537,8 @@ TTS 服务在：
 ---
 
 ## 9. 电话会议
+
+![电话会议](images/console-conference.png)
 
 ### 9.1 创建会议房间
 
@@ -807,6 +819,8 @@ SIP OPTIONS 心跳用于快速发现离线设备。
 
 ## 14. 音频库
 
+![音频库](images/console-media.png)
+
 进入：
 
 ```text
@@ -825,6 +839,8 @@ SIP OPTIONS 心跳用于快速发现离线设备。
 ---
 
 ## 15. 系统信息
+
+![系统信息](images/console-system.png)
 
 进入：
 
