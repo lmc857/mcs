@@ -117,6 +117,31 @@ paths:
       responses:
         '200': {description: OK}
 
+  /api/v1/conference:
+    get:
+      tags: [conference]
+      summary: 会议房间与参与者
+      responses:
+        '200': {description: OK}
+  /api/v1/conference/{room}/participants/{id}/mute:
+    post:
+      tags: [conference]
+      summary: 静音/取消静音
+      parameters:
+        - {name: room, in: path, required: true, schema: {type: string}}
+        - {name: id, in: path, required: true, schema: {type: string}}
+      responses:
+        '200': {description: OK}
+  /api/v1/conference/{room}/participants/{id}/kick:
+    post:
+      tags: [conference]
+      summary: 踢出参会者
+      parameters:
+        - {name: room, in: path, required: true, schema: {type: string}}
+        - {name: id, in: path, required: true, schema: {type: string}}
+      responses:
+        '200': {description: OK}
+
   /api/v1/system/settings:
     get:
       tags: [system]

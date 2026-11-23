@@ -131,6 +131,25 @@
 
 失败 `502 TTS_FAILED`。
 
+## 2.5.1 电话会议
+
+### GET `/api/v1/conference`
+
+```json
+{"items":[{"number":"7000","name":"会议室","max_members":8,"active":2,
+ "participants":[{"id":"...","ext":"1001","name":"值班室","muted":false,"codec":"PCMU","joined_at":"..."}]}],"total":1}
+```
+
+### POST `/api/v1/conference/{room}/participants/{id}/mute`
+
+```json
+{"muted":true}
+```
+
+### POST `/api/v1/conference/{room}/participants/{id}/kick`
+
+operator/admin 可操作，viewer 只读。
+
 ## 2.6 系统设置
 
 ### GET `/api/v1/system/settings`

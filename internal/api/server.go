@@ -82,6 +82,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("DELETE /api/v1/devices/{ext}", s.deviceDelete)
 	mux.HandleFunc("GET /api/v1/registrations", s.listDevices)
 	mux.HandleFunc("GET /api/v1/calls/active", s.activeCalls)
+	mux.HandleFunc("GET /api/v1/conference", s.conferenceList)
+	mux.HandleFunc("POST /api/v1/conference/{room}/participants/{id}/kick", s.conferenceKick)
+	mux.HandleFunc("POST /api/v1/conference/{room}/participants/{id}/mute", s.conferenceMute)
 	mux.HandleFunc("POST /api/v1/intercom/{call_id}/unlock", s.intercomUnlock)
 	mux.HandleFunc("POST /api/v1/webrtc/offer", s.webrtcOffer)
 	mux.HandleFunc("GET /api/v1/devices/{ext}/snapshot", s.deviceSnapshot)
@@ -705,6 +708,41 @@ func mustUDPAddr(addr string) *net.UDPAddr {
 		return &net.UDPAddr{}
 	}
 	return a
+}
+
+func (s *Server) conferenceList(w http.ResponseWriter, r *http.Request) {
+	rooms := s.sip.ConferenceView()
+	if rooms == nil {
+		rooms = []sipserver.ConferenceRoomView{}
+	}
+	writeJSON(w, 200, map[string]any{"items": rooms, "total": len(rooms)})
+}
+
+func (s *Server) conferenceKick(w http.ResponseWriter, r *http.Request) {
+	room := r.PathValue("room")
+	id := r.PathValue("id")
+	if err := s.sip.ConferenceKick(room, id); err != nil {
+		writeJSON(w, 404, map[string]any{"code": "NOT_FOUND", "message": err.Error()})
+		return
+	}
+	writeJSON(w, 200, map[string]any{"status": "ok"})
+}
+
+func (s *Server) conferenceMute(w http.ResponseWriter, r *http.Request) {
+	room := r.PathValue("room")
+	id := r.PathValue("id")
+	var req struct {
+		Muted bool `json:"muted"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, 400, map[string]any{"code": "VALIDATION_FAILED", "message": "invalid json"})
+		return
+	}
+	if err := s.sip.ConferenceMute(room, id, req.Muted); err != nil {
+		writeJSON(w, 404, map[string]any{"code": "NOT_FOUND", "message": err.Error()})
+		return
+	}
+	writeJSON(w, 200, map[string]any{"status": "ok", "muted": req.Muted})
 }
 
 func (s *Server) logRecent(w http.ResponseWriter, r *http.Request) {

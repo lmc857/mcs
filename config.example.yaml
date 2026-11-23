@@ -29,6 +29,15 @@ auth:
   console_password: ""   # 非空则启用控制台登录（Cookie 会话）
 
 # 报警策略：8000 按级别顺序振铃，超时自动升级
+conference:
+  # 电话会议：默认关闭；启用后拨房间短号进入
+  enabled: false
+  rooms:
+    - number: "7000"
+      name: "会议室"
+      max_members: 8
+      record: true
+
 registration:
   # 话机注册租期；UDP 断网/断电无法立刻感知，靠租期到期离线
   default_expires_s: 300

@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -15,6 +16,7 @@ type Config struct {
 	Alarm        AlarmConfig        `yaml:"alarm"`
 	Registration RegistrationConfig `yaml:"registration"`
 	Broadcast    BroadcastConfig    `yaml:"broadcast"`
+	Conference   ConferenceConfig   `yaml:"conference"`
 	Media        MediaConfig        `yaml:"media"`
 	TTS          TTSConfig          `yaml:"tts"`
 	Zones        []ZoneConfig       `yaml:"zones"`
@@ -67,6 +69,18 @@ type AlarmLevel struct {
 	Name     string   `yaml:"name"`
 	Members  []string `yaml:"members"`
 	TimeoutS int      `yaml:"timeout_s"`
+}
+
+type ConferenceConfig struct {
+	Enabled bool                   `yaml:"enabled"`
+	Rooms   []ConferenceRoomConfig `yaml:"rooms"`
+}
+
+type ConferenceRoomConfig struct {
+	Number     string `yaml:"number"`
+	Name       string `yaml:"name"`
+	MaxMembers int    `yaml:"max_members"`
+	Record     bool   `yaml:"record"`
 }
 
 type BroadcastConfig struct {
@@ -202,6 +216,27 @@ func Load(path string) (Config, error) {
 	}
 	if cfg.Auth.Realm == "" {
 		cfg.Auth.Realm = "mcs"
+	}
+	roomNumbers := map[string]bool{}
+	for i := range cfg.Conference.Rooms {
+		r := &cfg.Conference.Rooms[i]
+		r.Number = strings.TrimSpace(r.Number)
+		if r.Number == "" {
+			return cfg, fmt.Errorf("conference.rooms[%d].number is required", i)
+		}
+		if roomNumbers[r.Number] {
+			return cfg, fmt.Errorf("conference room %q duplicated", r.Number)
+		}
+		roomNumbers[r.Number] = true
+		if r.Name == "" {
+			r.Name = "会议 " + r.Number
+		}
+		if r.MaxMembers <= 0 {
+			r.MaxMembers = 8
+		}
+		if r.MaxMembers > 16 {
+			r.MaxMembers = 16
+		}
 	}
 	if cfg.Broadcast.AutoAnswer == "" {
 		cfg.Broadcast.AutoAnswer = "<http://127.0.0.1>;info=alert-autoanswer"

@@ -144,6 +144,10 @@ func (s *Server) handleInvite(req *sip.Request, tx sip.ServerTransaction) {
 		from = f.Address.User
 	}
 	to := req.Recipient.User
+	if room, ok := s.conference.find(to); ok {
+		s.handleConferenceInvite(req, tx, room)
+		return
+	}
 	if z, ok := s.findZoneByDial(to); ok {
 		s.handlePagingInvite(req, tx, z)
 		return
@@ -819,6 +823,11 @@ func (c *call) finish(result string) {
 
 func (s *Server) handleBye(req *sip.Request, tx sip.ServerTransaction) {
 	id := req.CallID().Value()
+	if p := s.conference.byCallID(id); p != nil {
+		_ = tx.Respond(sip.NewResponseFromRequest(req, 200, "OK", nil))
+		p.stop(false)
+		return
+	}
 	if ps := s.pagingGet(id); ps != nil {
 		_ = tx.Respond(sip.NewResponseFromRequest(req, 200, "OK", nil))
 		ps.stop()
@@ -854,6 +863,18 @@ func (s *Server) handleBye(req *sip.Request, tx sip.ServerTransaction) {
 
 func (s *Server) handleAck(req *sip.Request, tx sip.ServerTransaction) {
 	id := req.CallID().Value()
+	if p := s.conference.byCallID(id); p != nil {
+		if err := p.dss.ReadAck(req, tx); err != nil {
+			s.log.Warn("conference ack", "call_id", id, "error", err)
+		}
+		return
+	}
+	if ps := s.pagingGet(id); ps != nil {
+		if err := ps.dss.ReadAck(req, tx); err != nil {
+			s.log.Warn("paging ack", "call_id", id, "error", err)
+		}
+		return
+	}
 	c := s.calls.get(id)
 	if c != nil && id == c.aCallID {
 		if err := c.a.ReadAck(req, tx); err != nil {
@@ -864,6 +885,11 @@ func (s *Server) handleAck(req *sip.Request, tx sip.ServerTransaction) {
 
 func (s *Server) handleCancel(req *sip.Request, tx sip.ServerTransaction) {
 	id := req.CallID().Value()
+	if p := s.conference.byCallID(id); p != nil {
+		_ = tx.Respond(sip.NewResponseFromRequest(req, 200, "OK", nil))
+		p.stop(false)
+		return
+	}
 	if ps := s.pagingGet(id); ps != nil {
 		_ = tx.Respond(sip.NewResponseFromRequest(req, 200, "OK", nil))
 		go func() {

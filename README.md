@@ -17,6 +17,7 @@
 | [实时日志](docs/MCS-实时日志.md) | WebSocket 实时日志、486 排查、下载/过滤 |
 | [系统设置](docs/MCS-系统设置与重启.md) | 网页修改网络/监听/业务参数、重启、回滚 |
 | [用户与权限](docs/MCS-用户与权限.md) | admin/operator/viewer、首次管理员、用户管理 |
+| [电话会议](docs/MCS-会议.md) | 会议室配置、混音、静音/踢出、录音、API |
 | [TTS 服务配置](docs/MCS-TTS服务配置.md) | 本地/OpenAI/千问/MiniMax，控制台配置与 API |
 | [配置参考](docs/MCS-配置参考.md) | `config.yaml` 全字段与默认值 |
 | [部署手册](deploy/README.md) | systemd / Windows 服务 / Inno Setup 安装包 / HTTPS / TLS / SRTP |
@@ -45,6 +46,7 @@
 | 控制台登录 | ✅ Cookie 会话 + bcrypt，单管理员 |
 | M1 安装 | ✅ Linux systemd / Windows 原生 Service / Inno Setup 安装包 |
 | 广播 / TTS | ✅ 分区、优先级抢占、单播/组播、自动应答、逐终端状态；支持 PCMU/Opus |
+| 电话会议 | ✅ 8 方 PCMU/PCMA 混音、静音/踢出、网页参与者、混音录音 |
 | 实时寻呼 | ✅ 话机拨分区短号（如 5001）直接对分区讲话 |
 | 视频对讲（SIP） | ✅ H.264 透传，双向视频中继 |
 | 远程开锁 | ✅ 通话中向门口机发送 DTMF INFO |

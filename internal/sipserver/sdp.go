@@ -7,25 +7,27 @@ import (
 )
 
 type sdpInfo struct {
-	AudioPort   int
-	VideoPort   int
-	ConnIP      string
-	PayloadType uint8
-	Codec       string
-	VideoPT     uint8
-	VideoCodec  string
-	AudioProto  string
-	VideoProto  string
-	AudioSecure bool
-	VideoSecure bool
-	AudioCrypto cryptoInfo
-	VideoCrypto cryptoInfo
-	HasAudio    bool
-	HasVideo    bool
+	AudioPort     int
+	VideoPort     int
+	ConnIP        string
+	PayloadType   uint8
+	Codec         string
+	VideoPT       uint8
+	VideoCodec    string
+	AudioProto    string
+	VideoProto    string
+	AudioSecure   bool
+	VideoSecure   bool
+	AudioCrypto   cryptoInfo
+	VideoCrypto   cryptoInfo
+	HasAudio      bool
+	HasVideo      bool
+	AudioPayloads []uint8
+	AudioCodecs   map[uint8]string
 }
 
 func parseSDP(body []byte) sdpInfo {
-	info := sdpInfo{}
+	info := sdpInfo{AudioCodecs: map[uint8]string{}}
 	media := ""
 	text := strings.ReplaceAll(string(body), "\r\n", "\n")
 	for _, line := range strings.Split(text, "\n") {
@@ -69,6 +71,11 @@ func parseSDP(body []byte) sdpInfo {
 				info.AudioProto = strings.ToUpper(fields[2])
 				info.AudioSecure = strings.Contains(info.AudioProto, "SAVP")
 			}
+			for _, f := range fields[3:] {
+				if pt, err := strconv.Atoi(f); err == nil && pt >= 0 && pt <= 127 {
+					info.AudioPayloads = append(info.AudioPayloads, uint8(pt))
+				}
+			}
 			info.Codec = ""
 			info.HasAudio = true
 		case strings.HasPrefix(line, "a=crypto:"):
@@ -89,6 +96,9 @@ func parseSDP(body []byte) sdpInfo {
 			if len(parts) == 2 {
 				pt, _ := strconv.Atoi(parts[0])
 				codec := strings.ToUpper(strings.TrimSpace(strings.SplitN(parts[1], "/", 2)[0]))
+				if media == "audio" {
+					info.AudioCodecs[uint8(pt)] = codec
+				}
 				if int(info.PayloadType) == pt {
 					info.Codec = codec
 				}

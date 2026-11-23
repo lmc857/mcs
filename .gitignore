@@ -14,3 +14,7 @@ MCS-Setup-*.exe
 .DS_Store
 
 initial-admin.txt
+
+.dsh-plugins/
+idea-queue/
+idea-queue-dev/

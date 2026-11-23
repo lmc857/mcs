@@ -49,6 +49,7 @@ type Server struct {
 	media           *mediaLibrary
 	schedules       *scheduleStore
 	bc              *broadcastManager
+	conference      *conferenceManager
 	calls           *callRegistry
 	events          *eventBus
 	pagingMu        sync.Mutex
@@ -63,6 +64,7 @@ type Options struct {
 	Alarm        config.AlarmConfig
 	Registration config.RegistrationConfig
 	Broadcast    config.BroadcastConfig
+	Conference   config.ConferenceConfig
 	Media        config.MediaConfig
 	TTS          config.TTSConfig
 	Zones        []config.ZoneConfig
@@ -115,6 +117,7 @@ func New(st *store.Store, auth *Authenticator, cdr *store.CDRStore, alarms *stor
 		calls:     newCallRegistry(), events: newEventBus(),
 		paging: map[string]*pagingSession{},
 	}
+	s.conference = newConferenceManager(s, opts.Conference)
 	srv.OnRegister(s.onRegister)
 	srv.OnOptions(s.onOptions)
 	srv.OnInvite(s.handleInvite)
