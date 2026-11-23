@@ -156,6 +156,22 @@
 
 房间有参会者时返回 400。
 
+### POST `/api/v1/conference/{room}/webrtc`
+
+WebRTC 网页加入：
+
+```json
+{"sdp":"v=0..."}
+```
+
+返回：
+
+```json
+{"sdp":"v=0...","id":"web-admin-..."}
+```
+
+需要 operator/admin。浏览器使用 PCMU/PCMA 音频和 H264 视频；SIP 视频只转发当前发言者。
+
 ### POST `/api/v1/conference/{room}/participants/{id}/mute`
 
 ```json

@@ -146,6 +146,15 @@ paths:
         '200': {description: OK}
         '400': {description: 房间仍有参会者或不存在}
 
+  /api/v1/conference/{room}/webrtc:
+    post:
+      tags: [conference]
+      summary: WebRTC 网页加入会议
+      parameters:
+        - {name: room, in: path, required: true, schema: {type: string}}
+      responses:
+        '200': {description: 返回 SDP answer}
+
   /api/v1/conference/{room}/participants/{id}/mute:
     post:
       tags: [conference]

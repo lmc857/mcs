@@ -166,6 +166,15 @@ textarea.bc-text{margin:0 17px 12px;width:calc(100% - 34px)}
   </div>
 </div>
 
+<div id="conf-webrtc-modal" class="modal" hidden>
+  <div class="modal-card">
+    <div class="modal-head"><strong>网页加入会议</strong><button class="test-btn" onclick="leaveConferenceWebRTC()">关闭</button></div>
+    <video id="conf-webrtc-video" autoplay playsinline muted style="width:100%;max-height:56vh;background:#0b1220;border-radius:9px"></video>
+    <audio id="conf-webrtc-audio" autoplay></audio>
+    <div id="conf-webrtc-status" class="hint" style="margin-top:8px"></div>
+  </div>
+</div>
+
 <div id="video-modal" class="modal" hidden>
   <div class="modal-card">
     <div class="modal-head"><strong>实时视频</strong><button class="btn btn-sm" onclick="closeVideo()">关闭</button></div>
@@ -496,7 +505,7 @@ textarea.bc-text{margin:0 17px 12px;width:calc(100% - 34px)}
       <section id="tab-conference" class="tab-panel">
         <div class="panel">
           <div class="panel-head"><h2>电话会议</h2><span class="hint">话机拨会议短号加入；当前支持 PCMU/PCMA 音频</span></div>
-          <div class="form-note">话机拨房间短号即可加入；网页静音/踢人使用控制台登录账号（不是 SIP 分机账号）。会议短号与广播寻呼短号是两套号码：会议是双向混音，寻呼是单向广播。</div>
+          <div class="form-note">话机拨房间短号即可加入；网页静音/踢人使用控制台登录账号（不是 SIP 分机账号）。会议短号与广播寻呼短号是两套号码：会议是双向混音，寻呼是单向广播。视频只转发当前发言者；网页加入需要 HTTPS 或本机 127.0.0.1/localhost。</div>
           <div id="conference-admin" class="form" data-admin-only style="display:none">
             <input type="text" id="conf-new-number" placeholder="会议短号，如 7000" style="flex:0 1 150px">
             <input type="text" id="conf-new-name" placeholder="房间名称" style="flex:0 1 180px">
@@ -661,6 +670,76 @@ function renderDevices(data){
 }
 
 let conferenceRooms = [];
+let confPC = null, confLocalStream = null;
+
+function preferConferenceCodecs(pc){
+  for (const tr of pc.getTransceivers()) {
+    const kind = tr.sender && tr.sender.track ? tr.sender.track.kind : (tr.receiver && tr.receiver.track ? tr.receiver.track.kind : '');
+    if(!kind || !RTCRtpSender.getCapabilities) continue;
+    const caps = RTCRtpSender.getCapabilities(kind);
+    if(!caps) continue;
+    const prefs = caps.codecs.filter(c => kind === 'audio' ? /PCMU|PCMA/i.test(c.mimeType) : /H264/i.test(c.mimeType));
+    if(prefs.length) tr.setCodecPreferences(prefs);
+  }
+}
+
+async function joinConferenceWebRTC(room){
+  if(!navigator.mediaDevices || !window.RTCPeerConnection){ alert('当前浏览器不支持 WebRTC'); return; }
+  if(!window.isSecureContext){ alert('网页音视频需要 HTTPS，或在本机使用 http://127.0.0.1 / localhost 打开。'); return; }
+  if(confPC){ alert('已经在会议中，请先关闭当前网页会议'); return; }
+  let stream;
+  try{
+    stream = await navigator.mediaDevices.getUserMedia({audio:true, video:true});
+  }catch(e){
+    try{ stream = await navigator.mediaDevices.getUserMedia({audio:true}); }
+    catch(e2){ alert('无法打开麦克风/摄像头：' + e2.message); return; }
+  }
+  confLocalStream = stream;
+  const pc = new RTCPeerConnection({iceServers: []});
+  confPC = pc;
+  const remote = new MediaStream();
+  const video = $('conf-webrtc-video'), audio = $('conf-webrtc-audio');
+  pc.ontrack = ev => {
+    remote.addTrack(ev.track);
+    if(ev.track.kind === 'video'){ video.srcObject = new MediaStream([ev.track]); }
+    if(ev.track.kind === 'audio'){ audio.srcObject = new MediaStream([ev.track]); }
+    $('conf-webrtc-status').textContent = '已连接：' + (ev.track.kind === 'video' ? '视频' : '音频');
+  };
+  pc.onconnectionstatechange = () => {
+    const st = pc.connectionState;
+    $('conf-webrtc-status').textContent = 'WebRTC 状态：' + st;
+    if(st === 'failed' || st === 'disconnected' || st === 'closed') leaveConferenceWebRTC();
+  };
+  stream.getTracks().forEach(t => pc.addTrack(t, stream));
+  preferConferenceCodecs(pc);
+  try{
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    const res = await fetch('/api/v1/conference/' + encodeURIComponent(room) + '/webrtc', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({sdp: offer.sdp})
+    });
+    const d = await res.json().catch(() => ({}));
+    if(!res.ok) throw new Error(d.message || ('HTTP ' + res.status));
+    await pc.setRemoteDescription({type:'answer', sdp:d.sdp});
+    $('conf-webrtc-modal').hidden = false;
+    $('conf-webrtc-status').textContent = '已加入会议，等待音视频…';
+    refresh();
+  }catch(e){
+    alert('网页加入会议失败：' + e.message);
+    leaveConferenceWebRTC();
+  }
+}
+
+function leaveConferenceWebRTC(){
+  if(confPC){ try{ confPC.close(); }catch(e){} confPC = null; }
+  if(confLocalStream){ confLocalStream.getTracks().forEach(t => t.stop()); confLocalStream = null; }
+  const video = $('conf-webrtc-video'), audio = $('conf-webrtc-audio');
+  if(video) video.srcObject = null;
+  if(audio) audio.srcObject = null;
+  if($('conf-webrtc-modal')) $('conf-webrtc-modal').hidden = true;
+  refresh();
+}
 
 async function addConferenceRoom(){
   const number = $('conf-new-number').value.trim();
@@ -732,6 +811,7 @@ function renderConference(data){
         <td class="ext">${esc(p.ext)}</td>
         <td>${esc(p.name || '—')}</td>
         <td class="badge">${esc(p.codec || '—')}</td>
+        <td class="badge">${p.has_video ? '视频' : '音频'}</td>
         <td class="badge">${p.muted ? '已静音' : '发言中'}</td>
         <td class="hint">${time(p.joined_at)}</td>
         <td>${currentRole === 'viewer' ? '—' : `
@@ -745,8 +825,8 @@ function renderConference(data){
       <button class="test-btn" onclick="deleteConferenceRoom('${esc(r.number)}')">删除</button>` : '';
     return `<div class="panel" style="margin-bottom:12px;box-shadow:none">
       <div class="panel-head"><div><strong>${esc(r.name || r.number)}</strong> <span class="badge mono">${esc(r.number)}</span> ${r.enabled ? '' : '<span class="badge">已停用</span>'}</div>
-        <span class="hint">${r.active}/${r.max_members} 方${r.recording ? ' · <a class="link" href="' + esc(r.recording) + '">录音</a>' : ''} ${adminTools}</span></div>
-      ${rows ? `<table><thead><tr><th>分机</th><th>名称</th><th>编码</th><th>状态</th><th>加入时间</th><th>操作</th></tr></thead><tbody>${rows}</tbody></table>` : '<div class="empty" style="padding:12px 0">暂无参会者</div>'}
+        <span class="hint">${r.active}/${r.max_members} 方${r.recording ? ' · <a class="link" href="' + esc(r.recording) + '">录音</a>' : ''} ${currentRole !== 'viewer' ? `<button class="test-btn" onclick="joinConferenceWebRTC('${esc(r.number)}')">网页加入</button>` : ''} ${adminTools}</span></div>
+      ${rows ? `<table><thead><tr><th>分机</th><th>名称</th><th>编码</th><th>媒体</th><th>状态</th><th>加入时间</th><th>操作</th></tr></thead><tbody>${rows}</tbody></table>` : '<div class="empty" style="padding:12px 0">暂无参会者</div>'}
     </div>`;
   }).join('');
 }

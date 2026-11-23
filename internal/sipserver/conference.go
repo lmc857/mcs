@@ -13,7 +13,9 @@ import (
 
 	"github.com/emiago/sipgo"
 	"github.com/emiago/sipgo/sip"
+	"github.com/pion/rtcp"
 	"github.com/pion/rtp"
+	"github.com/pion/webrtc/v4"
 
 	"mcs/internal/config"
 	"mcs/internal/store"
@@ -43,6 +45,9 @@ type conferenceRoom struct {
 	rec       *conferenceRecorder
 	recording string
 
+	videoMu     sync.Mutex
+	videoSource *conferenceParticipant
+
 	server *Server
 }
 
@@ -59,6 +64,19 @@ type conferenceParticipant struct {
 
 	remoteMu sync.Mutex
 	remote   *net.UDPAddr
+
+	videoMu     sync.Mutex
+	videoConn   *net.UDPConn
+	videoRemote *net.UDPAddr
+	videoPT     uint8
+	hasVideo    bool
+	videoSSRC   uint32
+	lastPLI     time.Time
+
+	webrtcPC    *webrtc.PeerConnection
+	webrtcAudio *webrtc.TrackLocalStaticRTP
+	webrtcVideo *webrtc.TrackLocalStaticRTP
+	isWebRTC    bool
 
 	mu    sync.Mutex
 	in    chan []int16
@@ -80,6 +98,7 @@ type ConferenceParticipantView struct {
 	Name     string `json:"name"`
 	Muted    bool   `json:"muted"`
 	Codec    string `json:"codec"`
+	HasVideo bool   `json:"has_video"`
 	JoinedAt string `json:"joined_at"`
 }
 
@@ -326,7 +345,10 @@ func (r *conferenceRoom) view() ConferenceRoomView {
 	v := ConferenceRoomView{Number: r.number, Name: r.name, MaxMembers: r.max, Record: r.record, Enabled: r.enabled, Recording: r.recording}
 	for _, p := range r.parts {
 		p.mu.Lock()
-		item := ConferenceParticipantView{ID: p.id, Ext: p.ext, Name: p.name, Muted: p.muted, Codec: p.codec, JoinedAt: p.joinedAt.Format(time.RFC3339)}
+		p.videoMu.Lock()
+		hasVideo := p.hasVideo
+		p.videoMu.Unlock()
+		item := ConferenceParticipantView{ID: p.id, Ext: p.ext, Name: p.name, Muted: p.muted, Codec: p.codec, HasVideo: hasVideo, JoinedAt: p.joinedAt.Format(time.RFC3339)}
 		p.mu.Unlock()
 		v.Participants = append(v.Participants, item)
 	}
@@ -363,6 +385,11 @@ func (r *conferenceRoom) add(p *conferenceParticipant) bool {
 }
 
 func (r *conferenceRoom) remove(p *conferenceParticipant) {
+	r.videoMu.Lock()
+	if r.videoSource == p {
+		r.videoSource = nil
+	}
+	r.videoMu.Unlock()
 	r.mu.Lock()
 	delete(r.parts, p.id)
 	empty := len(r.parts) == 0
@@ -502,6 +529,12 @@ func (p *conferenceParticipant) readRTP() {
 		default:
 		}
 		p.mu.Unlock()
+		p.videoMu.Lock()
+		hasVideo := p.hasVideo
+		p.videoMu.Unlock()
+		if hasVideo {
+			p.room.selectVideo(p)
+		}
 	}
 }
 
@@ -516,24 +549,136 @@ func (p *conferenceParticipant) sendPCM(samples []int16) {
 		Header:  rtp.Header{Version: 2, PayloadType: p.pt, SequenceNumber: p.seq, Timestamp: p.ts, SSRC: p.ssrc},
 		Payload: payload,
 	}
+	p.seq++
+	p.ts += conferenceFrameSamples
+	if p.webrtcAudio != nil {
+		_ = p.webrtcAudio.WriteRTP(pkt)
+		return
+	}
 	raw, err := pkt.Marshal()
 	if err != nil {
 		return
 	}
-	p.seq++
-	p.ts += conferenceFrameSamples
 	p.remoteMu.Lock()
 	addr := p.remote
 	p.remoteMu.Unlock()
-	if addr != nil {
+	if addr != nil && p.conn != nil {
 		_, _ = p.conn.WriteToUDP(raw, addr)
+	}
+}
+
+func (p *conferenceParticipant) sendVideoPkt(pkt *rtp.Packet) {
+	if pkt == nil {
+		return
+	}
+	clone := *pkt
+	if p.webrtcVideo != nil {
+		_ = p.webrtcVideo.WriteRTP(&clone)
+		return
+	}
+	p.videoMu.Lock()
+	conn, addr, pt := p.videoConn, p.videoRemote, p.videoPT
+	p.videoMu.Unlock()
+	if conn == nil || addr == nil {
+		return
+	}
+	clone.PayloadType = pt
+	raw, err := clone.Marshal()
+	if err != nil {
+		return
+	}
+	_, _ = conn.WriteToUDP(raw, addr)
+}
+
+func (r *conferenceRoom) selectVideo(p *conferenceParticipant) {
+	r.videoMu.Lock()
+	r.videoSource = p
+	r.videoMu.Unlock()
+}
+
+func (r *conferenceRoom) publishVideo(p *conferenceParticipant, pkt *rtp.Packet) {
+	p.videoMu.Lock()
+	p.hasVideo = true
+	if pkt.SSRC != 0 {
+		p.videoSSRC = pkt.SSRC
+	}
+	ssrc := p.videoSSRC
+	videoConn, videoRemote := p.videoConn, p.videoRemote
+	needPLI := ssrc != 0 && time.Since(p.lastPLI) > 2*time.Second
+	if needPLI {
+		p.lastPLI = time.Now()
+	}
+	p.videoMu.Unlock()
+	if needPLI {
+		if p.webrtcPC != nil {
+			go func() {
+				_ = p.webrtcPC.WriteRTCP([]rtcp.Packet{&rtcp.PictureLossIndication{MediaSSRC: ssrc}})
+			}()
+		} else if videoConn != nil && videoRemote != nil {
+			// Best-effort PLI to a SIP video source's RTCP port (RTP+1).
+			if raw, err := (&rtcp.PictureLossIndication{MediaSSRC: ssrc}).Marshal(); err == nil {
+				rtcpAddr := *videoRemote
+				rtcpAddr.Port++
+				_, _ = videoConn.WriteToUDP(raw, &rtcpAddr)
+			}
+		}
+	}
+	r.videoMu.Lock()
+	if r.videoSource == nil {
+		r.videoSource = p
+	}
+	active := r.videoSource
+	r.videoMu.Unlock()
+	if active != p {
+		return
+	}
+	for _, dst := range r.snapshot() {
+		if dst.id == p.id {
+			continue
+		}
+		dst.sendVideoPkt(pkt)
+	}
+}
+
+func (p *conferenceParticipant) readVideoRTP() {
+	buf := make([]byte, 2048)
+	for {
+		n, addr, err := p.videoConn.ReadFromUDP(buf)
+		if err != nil {
+			return
+		}
+		var pkt rtp.Packet
+		if err := pkt.Unmarshal(buf[:n]); err != nil {
+			continue
+		}
+		p.videoMu.Lock()
+		want := p.videoPT
+		if want == 0 {
+			want = pkt.PayloadType
+		}
+		p.videoMu.Unlock()
+		if pkt.PayloadType != want {
+			continue
+		}
+		p.videoMu.Lock()
+		p.videoRemote = addr
+		p.videoMu.Unlock()
+		p.room.publishVideo(p, &pkt)
 	}
 }
 
 func (p *conferenceParticipant) stop(sendBye bool) {
 	p.stopOnce.Do(func() {
 		close(p.stopCh)
-		_ = p.conn.Close()
+		if p.conn != nil {
+			_ = p.conn.Close()
+		}
+		if p.videoConn != nil {
+			_ = p.videoConn.Close()
+		}
+		if p.webrtcPC != nil {
+			_ = p.webrtcPC.Close()
+		}
 		p.room.remove(p)
 		p.server.conference.removeCall(p.id)
 		p.server.log.Info("conference participant left", "room", p.room.number, "ext", p.ext, "call_id", p.id)
@@ -623,6 +768,19 @@ func (s *Server) handleConferenceInvite(req *sip.Request, tx sip.ServerTransacti
 		_ = dss.Respond(480, "Temporarily Unavailable", nil)
 		return
 	}
+	var videoConn *net.UDPConn
+	videoPT := uint8(0)
+	videoPort := 0
+	if offer.HasVideo && strings.EqualFold(offer.VideoCodec, "H264") && offer.VideoPort > 0 {
+		videoConn, _ = net.ListenUDP("udp4", &net.UDPAddr{IP: net.IPv4zero, Port: 0})
+		if videoConn != nil {
+			videoPort = videoConn.LocalAddr().(*net.UDPAddr).Port
+			videoPT = offer.VideoPT
+			if videoPT == 0 {
+				videoPT = 96
+			}
+		}
+	}
 	view, _ := s.store.Get(from)
 	name := view.Name
 	if name == "" {
@@ -631,23 +789,30 @@ func (s *Server) handleConferenceInvite(req *sip.Request, tx sip.ServerTransacti
 	callID := dss.InviteRequest.CallID().Value()
 	p := &conferenceParticipant{
 		id: callID, ext: from, name: name, codec: codec, pt: pt, conn: conn, dss: dss, server: s,
-		remote: conferenceRemote(offer, req.Source()),
-		in:     make(chan []int16, 8), stopCh: make(chan struct{}), joinedAt: time.Now(),
+		remote:    conferenceRemote(offer, req.Source()),
+		videoConn: videoConn, videoRemote: conferenceVideoRemote(offer, req.Source()), videoPT: videoPT,
+		in: make(chan []int16, 8), stopCh: make(chan struct{}), joinedAt: time.Now(),
 		seq: uint16(time.Now().UnixNano()), ts: uint32(time.Now().UnixNano()), ssrc: uint32(time.Now().UnixNano()),
 	}
 	if !room.add(p) {
 		_ = conn.Close()
+		if videoConn != nil {
+			_ = videoConn.Close()
+		}
 		_ = dss.Respond(486, "Busy Here", nil)
 		return
 	}
 	s.conference.addCall(p)
 	_ = dss.Respond(100, "Trying", nil)
-	sdp := conferenceSDP(s.advertiseHost, conn.LocalAddr().(*net.UDPAddr).Port, codec)
+	sdp := conferenceSDP(s.advertiseHost, conn.LocalAddr().(*net.UDPAddr).Port, codec, videoPort, videoPT)
 	if err := dss.RespondSDP(sdp); err != nil {
 		p.stop(false)
 		return
 	}
 	go p.readRTP()
+	if videoConn != nil {
+		go p.readVideoRTP()
+	}
 	s.log.Info("conference joined", "room", room.number, "ext", from, "call_id", callID, "codec", codec)
 	s.emit("conference.joined", map[string]any{"room": room.number, "id": callID, "ext": from, "name": name})
 
@@ -720,12 +885,34 @@ func conferenceRemote(info sdpInfo, source string) *net.UDPAddr {
 	return &net.UDPAddr{IP: ip, Port: port}
 }
 
-func conferenceSDP(host string, port int, codec string) []byte {
+func conferenceSDP(host string, port int, codec string, videoPort int, videoPT uint8) []byte {
 	pt, name := 0, "PCMU"
 	if codec == "PCMA" {
 		pt, name = 8, "PCMA"
 	}
-	return []byte(fmt.Sprintf("v=0\r\no=- 1 1 IN IP4 %s\r\ns=MCS Conference\r\nc=IN IP4 %s\r\nt=0 0\r\nm=audio %d RTP/AVP %d\r\na=rtpmap:%d %s/8000\r\na=sendrecv\r\n", host, host, port, pt, pt, name))
+	sdp := fmt.Sprintf("v=0\r\no=- 1 1 IN IP4 %s\r\ns=MCS Conference\r\nc=IN IP4 %s\r\nt=0 0\r\nm=audio %d RTP/AVP %d\r\na=rtpmap:%d %s/8000\r\na=sendrecv\r\n", host, host, port, pt, pt, name)
+	if videoPort > 0 && videoPT > 0 {
+		sdp += fmt.Sprintf("m=video %d RTP/AVP %d\r\na=rtpmap:%d H264/90000\r\na=fmtp:%d packetization-mode=1\r\na=sendrecv\r\n", videoPort, videoPT, videoPT, videoPT)
+	}
+	return []byte(sdp)
+}
+
+func conferenceVideoRemote(info sdpInfo, source string) *net.UDPAddr {
+	host := info.ConnIP
+	port := info.VideoPort
+	if host == "" || host == "0.0.0.0" {
+		if h, p, err := net.SplitHostPort(source); err == nil {
+			host = h
+			if port <= 0 {
+				fmt.Sscanf(p, "%d", &port)
+			}
+		}
+	}
+	ip := net.ParseIP(host)
+	if ip == nil || ip.IsUnspecified() || port <= 0 {
+		return nil
+	}
+	return &net.UDPAddr{IP: ip, Port: port}
 }
 
 type conferenceRecorder struct {

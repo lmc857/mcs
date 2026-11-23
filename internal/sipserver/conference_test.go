@@ -21,10 +21,12 @@ import (
 )
 
 type confClient struct {
-	ua   *sipgo.UserAgent
-	dcs  *sipgo.DialogClientSession
-	conn *net.UDPConn
-	mcs  *net.UDPAddr
+	ua        *sipgo.UserAgent
+	dcs       *sipgo.DialogClientSession
+	conn      *net.UDPConn
+	mcs       *net.UDPAddr
+	videoConn *net.UDPConn
+	videoMCS  *net.UDPAddr
 }
 
 func joinConference(t *testing.T, ctx context.Context, port int, ext string) *confClient {
@@ -132,6 +134,86 @@ func TestConferenceMix(t *testing.T) {
 	}
 	if !nonSilent {
 		t.Fatal("conference output is silence")
+	}
+}
+
+func joinConferenceWithVideo(t *testing.T, ctx context.Context, port int, ext string) *confClient {
+	t.Helper()
+	ua, err := sipgo.NewUA()
+	if err != nil {
+		t.Fatal(err)
+	}
+	client, err := sipgo.NewClient(ua)
+	if err != nil {
+		t.Fatal(err)
+	}
+	aconn, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.ParseIP("127.0.0.1")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	vconn, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.ParseIP("127.0.0.1")})
+	if err != nil {
+		_ = aconn.Close()
+		t.Fatal(err)
+	}
+	dua := &sipgo.DialogUA{Client: client, ContactHDR: sip.ContactHeader{Address: sip.Uri{Scheme: "sip", User: ext, Host: "127.0.0.1", Port: 15076}}}
+	sdp := []byte("v=0\r\no=- 1 1 IN IP4 127.0.0.1\r\ns=-\r\nc=IN IP4 127.0.0.1\r\nt=0 0\r\nm=audio " + itoa(aconn.LocalAddr().(*net.UDPAddr).Port) + " RTP/AVP 0\r\na=rtpmap:0 PCMU/8000\r\na=sendrecv\r\nm=video " + itoa(vconn.LocalAddr().(*net.UDPAddr).Port) + " RTP/AVP 96\r\na=rtpmap:96 H264/90000\r\na=fmtp:96 packetization-mode=1\r\na=sendrecv\r\n")
+	dcs, err := dua.Invite(ctx, sip.Uri{Scheme: "sip", User: "7000", Host: "127.0.0.1", Port: port}, sdp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := dcs.WaitAnswer(ctx, sipgo.AnswerOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := dcs.Ack(ctx); err != nil {
+		t.Fatal(err)
+	}
+	info := parseSDP(dcs.InviteResponse.Body())
+	return &confClient{ua: ua, dcs: dcs, conn: aconn, mcs: &net.UDPAddr{IP: net.ParseIP(info.ConnIP), Port: info.AudioPort}, videoConn: vconn, videoMCS: &net.UDPAddr{IP: net.ParseIP(info.ConnIP), Port: info.VideoPort}}
+}
+
+func TestConferenceVideoForward(t *testing.T) {
+	const sipPort = 15079
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	st := store.New(nil)
+	srv, err := New(st, NewAuthenticator("mcs", "test"), store.NewCDRStore(10), store.NewAlarmStore(10), Options{
+		Domain: "mcs.local", Advertise: "127.0.0.1:15079", DataDir: t.TempDir(),
+		Conference: config.ConferenceConfig{Enabled: true, Rooms: []config.ConferenceRoomConfig{{Number: "7000", Name: "test", MaxMembers: 8}}},
+	}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	go func() { _ = srv.Serve(ctx, "127.0.0.1:15079") }()
+	time.Sleep(150 * time.Millisecond)
+	defer srv.Close()
+	a := joinConferenceWithVideo(t, ctx, sipPort, "1001")
+	defer a.ua.Close()
+	defer a.conn.Close()
+	defer a.videoConn.Close()
+	b := joinConferenceWithVideo(t, ctx, sipPort, "1002")
+	defer b.ua.Close()
+	defer b.conn.Close()
+	defer b.videoConn.Close()
+	time.Sleep(100 * time.Millisecond)
+	if b.videoMCS == nil || b.videoMCS.Port == 0 {
+		t.Fatalf("no video answer: %+v", b.videoMCS)
+	}
+	pkt := &rtp.Packet{Header: rtp.Header{Version: 2, PayloadType: 96, SequenceNumber: 1, Timestamp: 1, SSRC: 42}, Payload: []byte{0x00, 0x00, 0x00, 0x01, 0x09}}
+	raw, _ := pkt.Marshal()
+	for i := 0; i < 3; i++ {
+		_, _ = a.videoConn.WriteToUDP(raw, a.videoMCS)
+		time.Sleep(20 * time.Millisecond)
+	}
+	_ = b.videoConn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	buf := make([]byte, 1500)
+	n, _, err := b.videoConn.ReadFromUDP(buf)
+	if err != nil {
+		t.Fatalf("conference video not forwarded: %v", err)
+	}
+	var got rtp.Packet
+	if err := got.Unmarshal(buf[:n]); err != nil || got.PayloadType != 96 {
+		t.Fatalf("bad forwarded video packet: %v pt=%d", err, got.PayloadType)
 	}
 }
 

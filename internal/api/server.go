@@ -86,6 +86,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/v1/conference/rooms", s.conferenceRoomCreate)
 	mux.HandleFunc("PATCH /api/v1/conference/rooms/{number}", s.conferenceRoomUpdate)
 	mux.HandleFunc("DELETE /api/v1/conference/rooms/{number}", s.conferenceRoomDelete)
+	mux.HandleFunc("POST /api/v1/conference/{room}/webrtc", s.conferenceWebRTC)
 	mux.HandleFunc("POST /api/v1/conference/{room}/participants/{id}/kick", s.conferenceKick)
 	mux.HandleFunc("POST /api/v1/conference/{room}/participants/{id}/mute", s.conferenceMute)
 	mux.HandleFunc("POST /api/v1/intercom/{call_id}/unlock", s.intercomUnlock)
@@ -764,6 +765,27 @@ func (s *Server) conferenceRoomDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, 200, map[string]any{"status": "ok"})
+}
+
+func (s *Server) conferenceWebRTC(w http.ResponseWriter, r *http.Request) {
+	room := r.PathValue("room")
+	var req struct {
+		SDP string `json:"sdp"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || strings.TrimSpace(req.SDP) == "" {
+		writeJSON(w, 400, map[string]any{"code": "VALIDATION_FAILED", "message": "sdp required"})
+		return
+	}
+	user := "admin"
+	if sess, ok := s.sessionFor(r); ok && sess.username != "" {
+		user = sess.username
+	}
+	answer, id, err := s.sip.HandleConferenceWebRTC(r.Context(), room, user, req.SDP)
+	if err != nil {
+		writeJSON(w, 400, map[string]any{"code": "WEBRTC_FAILED", "message": err.Error()})
+		return
+	}
+	writeJSON(w, 200, map[string]any{"sdp": answer, "id": id})
 }
 
 func (s *Server) conferenceKick(w http.ResponseWriter, r *http.Request) {
