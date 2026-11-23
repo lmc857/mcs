@@ -99,6 +99,31 @@ POST /api/v1/logout
 - 首次登录强制改密；
 - HTTPS 强制和 API Token。
 
+## 5.1 页面提示 `/api/v1/devices HTTP 401`
+
+这是**未登录/会话失效**，不是设备 API 故障。
+
+新装或升级后：
+
+1. 页面应自动弹出登录框；
+2. 如果还显示旧页面，按 `Ctrl+F5` 强制刷新；
+3. 首次安装没有配置 `console_password` 时，查看：
+
+```text
+<data_dir>/initial-admin.txt
+```
+
+Windows 默认：
+
+```text
+C:\ProgramData\MCS\initial-admin.txt
+```
+
+4. 账号密码登录后 401 会消失；
+5. 重装/重启会清空内存会话，浏览器旧 Cookie 失效，必须重新登录。
+
+新版已关闭控制台页面缓存，并在 API 返回 401 时自动弹出登录框。
+
 ## 6. 忘记管理员密码
 
 如果配置了 `console_password` 且用户表为空，重新启动可重新创建。

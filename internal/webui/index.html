@@ -605,8 +605,23 @@ const dur = n => {
 };
 const resultLabel = r => ({answered:'接通', no_answer:'未接', busy:'忙', failed:'失败', canceled:'取消'}[r] || r || '—');
 
+let authPrompted = false;
+function showLoginPrompt(){
+  const modal = $('login-modal');
+  if(!modal) return;
+  modal.hidden = false;
+  const user = $('login-user');
+  if(user && !user.value) user.value = 'admin';
+  setTimeout(() => $('login-pass')?.focus(), 50);
+  authPrompted = true;
+}
+
 async function getJSON(url){
   const res = await fetch(url, {cache:'no-store'});
+  if(res.status === 401){
+    showLoginPrompt();
+    throw new Error(url + ' HTTP 401');
+  }
   if(!res.ok) throw new Error(url + ' HTTP ' + res.status);
   return res.json();
 }
@@ -1028,7 +1043,7 @@ async function refresh(){
     $('updated').textContent = '更新于 ' + new Date().toLocaleTimeString('zh-CN', {hour12:false});
   }catch(e){
     refreshFailures++;
-    if(refreshFailures >= 2){
+    if(refreshFailures >= 2 && $('login-modal')?.hidden !== false){
       $('err').style.display = 'block';
       $('err').textContent = '无法连接 MCS API：' + e.message;
     }
@@ -1126,6 +1141,7 @@ async function doLogin(){
     $('login-pass').value = '';
     currentUser = data.user || '';
     currentRole = data.role || 'admin';
+    authPrompted = false;
     applyRoleUI();
     startApp();
   }catch(e){ $('login-msg').textContent = '登录失败：' + e.message; }
