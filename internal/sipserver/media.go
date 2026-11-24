@@ -21,6 +21,8 @@ import (
 type relay struct {
 	conn      *net.UDPConn
 	peer      atomic.Pointer[net.UDPAddr]
+	rtcpPeer  atomic.Pointer[net.UDPAddr]
+	outPT     atomic.Int32
 	once      sync.Once
 	rx        *srtp.Context
 	tx        *srtp.Context
@@ -38,20 +40,41 @@ func newRelay() (*relay, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &relay{conn: conn}, nil
+	r := &relay{conn: conn}
+	r.outPT.Store(-1)
+	return r, nil
 }
 
 func (r *relay) port() int { return r.conn.LocalAddr().(*net.UDPAddr).Port }
 
 func (r *relay) setPeer(host string, port int) {
-	if host == "" || port <= 0 {
+	r.setPeerRTCP(host, port, 0, false)
+}
+
+// setPeerRTCP sets the RTP destination and, separately, the RTCP destination.
+// Sending RTCP to the RTP port (or letting an incoming RTCP packet overwrite
+// the RTP peer) causes intermittent loss and visible video corruption.
+func (r *relay) setPeerRTCP(host string, rtpPort, rtcpPort int, mux bool) {
+	if host == "" || rtpPort <= 0 {
 		return
 	}
 	ip := net.ParseIP(host)
 	if ip == nil || ip.IsUnspecified() {
 		return
 	}
-	r.peer.Store(&net.UDPAddr{IP: ip, Port: port})
+	r.peer.Store(&net.UDPAddr{IP: ip, Port: rtpPort})
+	if mux || rtcpPort <= 0 {
+		rtcpPort = rtpPort
+	}
+	r.rtcpPeer.Store(&net.UDPAddr{IP: ip, Port: rtcpPort})
+}
+
+// setOutPT rewrites the RTP payload type on outgoing media. It is used when
+// the two legs negotiated different dynamic H264 payload types.
+func (r *relay) setOutPT(pt uint8) {
+	if pt <= 127 {
+		r.outPT.Store(int32(pt))
+	}
 }
 
 func (r *relay) writeToPeer(pkt []byte) error {
@@ -60,6 +83,11 @@ func (r *relay) writeToPeer(pkt []byte) error {
 
 func (r *relay) send(pkt []byte) error {
 	p := r.peer.Load()
+	if isRTCP(pkt) {
+		if rp := r.rtcpPeer.Load(); rp != nil {
+			p = rp
+		}
+	}
 	if p == nil {
 		return fmt.Errorf("relay peer not learned")
 	}
@@ -141,18 +169,27 @@ func (r *relay) start(dst *relay, onPayload func([]byte, uint8)) {
 
 func (r *relay) startWithTap(dst *relay, onPayload func([]byte, uint8), onPacket func([]byte)) {
 	go func() {
-		buf := make([]byte, 2048)
+		buf := make([]byte, 65535)
 		for {
 			n, addr, err := r.conn.ReadFromUDP(buf)
 			if err != nil {
 				return
 			}
-			if n < 12 {
+			if n < 8 {
 				continue
 			}
-			r.peer.Store(addr)
 			pkt := buf[:n]
 			rtcp := isRTCP(pkt)
+			if !rtcp && n < 12 {
+				continue
+			}
+			if rtcp {
+				// RTCP often comes from RTP+1. Never use it to overwrite
+				// the RTP destination; only remember where RTCP replies go.
+				r.rtcpPeer.Store(addr)
+			} else {
+				r.peer.Store(addr)
+			}
 			if r.rx != nil {
 				var dec []byte
 				var err error
@@ -183,8 +220,15 @@ func (r *relay) startWithTap(dst *relay, onPayload func([]byte, uint8), onPacket
 				}
 			}
 			out := pkt
-			if dst.transcode {
-				out = transcodeRTP(pkt, r.codec, dst.codec)
+			if rtcp {
+				out = pkt
+			} else {
+				if pt := uint8(r.outPT.Load()); r.outPT.Load() >= 0 && len(out) >= 2 {
+					out[1] = (out[1] & 0x80) | (pt & 0x7f)
+				}
+				if dst.transcode {
+					out = transcodeRTP(pkt, r.codec, dst.codec)
+				}
 			}
 			if err := dst.send(out); err != nil {
 				continue

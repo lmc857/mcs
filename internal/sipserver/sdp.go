@@ -18,6 +18,10 @@ type sdpInfo struct {
 	VideoProto    string
 	AudioSecure   bool
 	VideoSecure   bool
+	AudioRTCPPort int
+	VideoRTCPPort int
+	AudioRTCPMux  bool
+	VideoRTCPMux  bool
 	AudioCrypto   cryptoInfo
 	VideoCrypto   cryptoInfo
 	HasAudio      bool
@@ -78,6 +82,26 @@ func parseSDP(body []byte) sdpInfo {
 			}
 			info.Codec = ""
 			info.HasAudio = true
+		case strings.HasPrefix(line, "a=rtcp:"):
+			rest := strings.TrimSpace(strings.TrimPrefix(line, "a=rtcp:"))
+			fields := strings.Fields(rest)
+			if len(fields) > 0 {
+				if p, err := strconv.Atoi(fields[0]); err == nil {
+					switch media {
+					case "audio":
+						info.AudioRTCPPort = p
+					case "video":
+						info.VideoRTCPPort = p
+					}
+				}
+			}
+		case strings.HasPrefix(line, "a=rtcp-mux"):
+			switch media {
+			case "audio":
+				info.AudioRTCPMux = true
+			case "video":
+				info.VideoRTCPMux = true
+			}
 		case strings.HasPrefix(line, "a=crypto:"):
 			c := parseCryptoAttr(strings.TrimPrefix(line, "a=crypto:"))
 			switch media {

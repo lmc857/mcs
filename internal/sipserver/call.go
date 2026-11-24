@@ -329,7 +329,7 @@ func (c *call) tryTarget(t alarmTarget, offer sdpInfo) (bool, string) {
 	rb.transcode = s.mediaTranscode
 	aMediaIP := mediaIPForSource(offer.ConnIP, c.a.InviteRequest.Source())
 	s.log.Info("a-leg media", "call_id", c.id, "sdp_ip", offer.ConnIP, "peer_ip", aMediaIP, "port", offer.AudioPort)
-	ra.setPeer(aMediaIP, offer.AudioPort)
+	ra.setPeerRTCP(aMediaIP, offer.AudioPort, offer.AudioRTCPPort, offer.AudioRTCPMux)
 	c.codecA = codecFor(offer)
 	c.audioPT = offer.PayloadType
 	ra.codec = c.codecA
@@ -488,7 +488,7 @@ func (c *call) tryTarget(t alarmTarget, offer sdpInfo) (bool, string) {
 	infoB := parseSDP(answer)
 	bMediaIP := mediaIPForSource(infoB.ConnIP, t.view.Source)
 	s.log.Info("b-leg media", "call_id", c.id, "sdp_ip", infoB.ConnIP, "peer_ip", bMediaIP, "port", infoB.AudioPort)
-	rb.setPeer(bMediaIP, infoB.AudioPort)
+	rb.setPeerRTCP(bMediaIP, infoB.AudioPort, infoB.AudioRTCPPort, infoB.AudioRTCPMux)
 	c.codecB = codecFor(infoB)
 	rb.codec = c.codecB
 	s.log.Info("call codecs", "call_id", c.id, "a", c.codecA, "b", c.codecB, "transcode", s.mediaTranscode)
@@ -496,6 +496,17 @@ func (c *call) tryTarget(t alarmTarget, offer sdpInfo) (bool, string) {
 	videoPortA := 0
 	if videoOK {
 		videoPortA = va.port()
+		s.log.Info("call video", "call_id", c.id, "a_pt", offer.VideoPT, "b_pt", infoB.VideoPT,
+			"a_rtcp_mux", offer.VideoRTCPMux, "b_rtcp_mux", infoB.VideoRTCPMux)
+		// The two SDP answers may use different dynamic H264 payload types.
+		// Rewrite the RTP PT per leg; otherwise the receiver sees a PT it did
+		// not negotiate and may drop or mis-decode the video.
+		if infoB.VideoPT != 0 {
+			va.setOutPT(infoB.VideoPT)
+		}
+		if offer.VideoPT != 0 {
+			vb.setOutPT(offer.VideoPT)
+		}
 	} else if va != nil {
 		va.close()
 		vb.close()
@@ -604,8 +615,8 @@ func (c *call) tryTarget(t alarmTarget, offer sdpInfo) (bool, string) {
 	ra.startWithTap(rb, func(payload []byte, pt uint8) { c.rec.writeA(payload, c.codecA) }, audioTap.push)
 	rb.start(ra, func(payload []byte, pt uint8) { c.rec.writeB(payload, c.codecB) })
 	if videoOK {
-		va.setPeer(mediaIPForSource(offer.ConnIP, c.a.InviteRequest.Source()), offer.VideoPort)
-		vb.setPeer(mediaIPForSource(infoB.ConnIP, t.view.Source), infoB.VideoPort)
+		va.setPeerRTCP(mediaIPForSource(offer.ConnIP, c.a.InviteRequest.Source()), offer.VideoPort, offer.VideoRTCPPort, offer.VideoRTCPMux)
+		vb.setPeerRTCP(mediaIPForSource(infoB.ConnIP, t.view.Source), infoB.VideoPort, infoB.VideoRTCPPort, infoB.VideoRTCPMux)
 		va.startWithTap(vb, nil, tap.push)
 		vb.start(va, nil)
 	}
