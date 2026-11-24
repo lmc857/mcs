@@ -46,8 +46,10 @@ type conferenceRoom struct {
 	rec       *conferenceRecorder
 	recording string
 
-	videoMu     sync.Mutex
-	videoSource *conferenceParticipant
+	videoMu             sync.Mutex
+	videoSource         *conferenceParticipant
+	videoCandidate      *conferenceParticipant
+	videoCandidateSince time.Time
 
 	server *Server
 }
@@ -337,6 +339,14 @@ func (m *conferenceManager) mute(roomNumber, id string, muted bool) error {
 	p.mu.Lock()
 	p.muted = muted
 	p.mu.Unlock()
+	if muted {
+		r.videoMu.Lock()
+		if r.videoSource == p {
+			r.videoSource = nil
+			r.videoCandidate = nil
+		}
+		r.videoMu.Unlock()
+	}
 	return nil
 }
 
@@ -386,11 +396,7 @@ func (r *conferenceRoom) add(p *conferenceParticipant) bool {
 }
 
 func (r *conferenceRoom) remove(p *conferenceParticipant) {
-	r.videoMu.Lock()
-	if r.videoSource == p {
-		r.videoSource = nil
-	}
-	r.videoMu.Unlock()
+	r.clearVideoSource(p)
 	r.mu.Lock()
 	delete(r.parts, p.id)
 	empty := len(r.parts) == 0
@@ -531,7 +537,7 @@ func (p *conferenceParticipant) readRTP() {
 		hasVideo := p.hasVideo
 		p.videoMu.Unlock()
 		if hasVideo {
-			p.room.selectVideo(p)
+			p.room.noteAudio(p, pcmRMS(samples))
 		}
 	}
 }
@@ -624,13 +630,60 @@ func (p *conferenceParticipant) sendVideoPkt(pkt *rtp.Packet) {
 	_, _ = conn.WriteToUDP(raw, addr)
 }
 
-func (r *conferenceRoom) selectVideo(p *conferenceParticipant) {
+// noteAudio selects the video source using actual speech energy and a short
+// hold time. Selecting on every RTP packet (including comfort noise/DTX)
+// made the conference picture jump to the wrong participant or flicker.
+func (r *conferenceRoom) noteAudio(p *conferenceParticipant, rms float64) {
+	if rms < 350 {
+		return
+	}
+	p.mu.Lock()
+	muted := p.muted
+	p.mu.Unlock()
+	if muted {
+		return
+	}
+	now := time.Now()
 	r.videoMu.Lock()
-	r.videoSource = p
+	defer r.videoMu.Unlock()
+	if r.videoSource == nil {
+		r.videoSource = p
+		r.videoCandidate = nil
+		return
+	}
+	if r.videoSource == p {
+		r.videoCandidate = nil
+		return
+	}
+	if r.videoCandidate != p {
+		r.videoCandidate = p
+		r.videoCandidateSince = now
+		return
+	}
+	if now.Sub(r.videoCandidateSince) >= 900*time.Millisecond {
+		r.videoSource = p
+		r.videoCandidate = nil
+	}
+}
+
+func (r *conferenceRoom) clearVideoSource(p *conferenceParticipant) {
+	r.videoMu.Lock()
+	if r.videoSource == p {
+		r.videoSource = nil
+	}
+	if r.videoCandidate == p {
+		r.videoCandidate = nil
+	}
 	r.videoMu.Unlock()
 }
 
 func (r *conferenceRoom) publishVideo(p *conferenceParticipant, pkt *rtp.Packet) {
+	p.mu.Lock()
+	muted := p.muted
+	p.mu.Unlock()
+	if muted {
+		return
+	}
 	p.videoMu.Lock()
 	p.hasVideo = true
 	if pkt.SSRC != 0 {

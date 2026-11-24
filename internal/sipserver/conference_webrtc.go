@@ -145,7 +145,7 @@ func (p *conferenceParticipant) pumpWebRTCAudio(track *webrtc.TrackRemote) {
 		hasVideo := p.hasVideo
 		p.videoMu.Unlock()
 		if hasVideo {
-			p.room.selectVideo(p)
+			p.room.noteAudio(p, pcmRMS(samples))
 		}
 	}
 }

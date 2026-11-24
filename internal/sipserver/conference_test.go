@@ -296,3 +296,46 @@ func TestConferencePCMBufferPtime(t *testing.T) {
 		t.Fatalf("unexpected extra frame: %d", len(f))
 	}
 }
+
+func TestConferenceVideoSpeakerSelection(t *testing.T) {
+	room := &conferenceRoom{}
+	a := &conferenceParticipant{id: "a"}
+	b := &conferenceParticipant{id: "b"}
+	c := &conferenceParticipant{id: "c"}
+
+	// Low-level noise must not take the video.
+	room.noteAudio(a, 100)
+	if room.videoSource != nil {
+		t.Fatal("noise selected a video source")
+	}
+	room.noteAudio(a, 800)
+	if room.videoSource != a {
+		t.Fatal("active speaker not selected")
+	}
+	// A second speaker becomes a candidate, but does not instantly steal the
+	// picture (hysteresis prevents flicker/wrong-person frames).
+	room.noteAudio(b, 900)
+	if room.videoSource != a || room.videoCandidate != b {
+		t.Fatalf("source=%v candidate=%v", room.videoSource, room.videoCandidate)
+	}
+	time.Sleep(950 * time.Millisecond)
+	room.noteAudio(b, 900)
+	if room.videoSource != b {
+		t.Fatal("sustained speaker did not take the video")
+	}
+	// Muted participants cannot become the active video source.
+	room.muteNative(c)
+	room.videoMu.Lock()
+	room.videoSource = nil
+	room.videoMu.Unlock()
+	room.noteAudio(c, 5000)
+	if room.videoSource != nil {
+		t.Fatal("muted participant selected")
+	}
+}
+
+func (r *conferenceRoom) muteNative(p *conferenceParticipant) {
+	p.mu.Lock()
+	p.muted = true
+	p.mu.Unlock()
+}
