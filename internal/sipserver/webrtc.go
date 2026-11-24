@@ -88,10 +88,16 @@ func (c *call) browserAudioRelay() *relay {
 	from, to := c.from, c.to
 	ra, rb := c.relayA, c.relayB
 	c.stateMu.RUnlock()
-	if strings.HasPrefix(to, "6") && !strings.HasPrefix(from, "6") {
+	// Browser microphone is only valid for door-station talkback. Returning
+	// the A-leg for an alarm call injected the viewer's room noise into the
+	// caller (1002) and was heard as continuous noise.
+	if strings.HasPrefix(from, "6") {
+		return ra
+	}
+	if strings.HasPrefix(to, "6") {
 		return rb
 	}
-	return ra
+	return nil
 }
 
 func (c *call) pumpBrowserAudio(track *webrtc.TrackRemote) {
@@ -117,11 +123,15 @@ func (c *call) pumpBrowserAudio(track *webrtc.TrackRemote) {
 	}
 }
 
-// HandleWebRTCOffer creates a sendrecv audio + recvonly H.264 browser viewer.
-func (s *Server) HandleWebRTCOffer(ctx context.Context, callID, offerSDP string) (string, error) {
+// HandleWebRTCOffer creates a browser viewer. talkback=true enables the
+// browser microphone and is only allowed when one leg is a door station.
+func (s *Server) HandleWebRTCOffer(ctx context.Context, callID, offerSDP string, talkback bool) (string, error) {
 	c := s.calls.getByID(callID)
 	if c == nil {
 		return "", fmt.Errorf("call not found")
+	}
+	if talkback && !c.hasDoorLeg() {
+		return "", fmt.Errorf("仅门口机通话支持网页对讲")
 	}
 	c.stateMu.RLock()
 	tap := c.videoTap
@@ -161,11 +171,13 @@ func (s *Server) HandleWebRTCOffer(ctx context.Context, callID, offerSDP string)
 		_ = pc.Close()
 		return "", err
 	}
-	pc.OnTrack(func(track *webrtc.TrackRemote, _ *webrtc.RTPReceiver) {
-		if track.Kind() == webrtc.RTPCodecTypeAudio {
-			go c.pumpBrowserAudio(track)
-		}
-	})
+	if talkback {
+		pc.OnTrack(func(track *webrtc.TrackRemote, _ *webrtc.RTPReceiver) {
+			if track.Kind() == webrtc.RTPCodecTypeAudio {
+				go c.pumpBrowserAudio(track)
+			}
+		})
+	}
 	pc.OnConnectionStateChange(func(state webrtc.PeerConnectionState) {
 		switch state {
 		case webrtc.PeerConnectionStateFailed, webrtc.PeerConnectionStateClosed, webrtc.PeerConnectionStateDisconnected:
@@ -203,4 +215,14 @@ func (s *Server) HandleWebRTCOffer(ctx context.Context, callID, offerSDP string)
 	audioTap.add(pc, audioTrack)
 	s.log.Info("webrtc viewer attached", "call_id", callID)
 	return local.SDP, nil
+}
+
+func (c *call) hasDoorLeg() bool {
+	c.stateMu.RLock()
+	from, to, alarmID := c.from, c.to, c.alarmID
+	c.stateMu.RUnlock()
+	if alarmID != "" {
+		return false
+	}
+	return strings.HasPrefix(from, "6") || strings.HasPrefix(to, "6")
 }

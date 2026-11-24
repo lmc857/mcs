@@ -14,7 +14,6 @@ import (
 
 	"github.com/emiago/sipgo"
 	"github.com/emiago/sipgo/sip"
-	"github.com/pion/rtp"
 	"github.com/pion/webrtc/v4"
 
 	"mcs/internal/config"
@@ -152,15 +151,6 @@ func TestCallVideoRelay(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	browserAudio, err := webrtc.NewTrackLocalStaticRTP(webrtc.RTPCodecCapability{
-		MimeType: webrtc.MimeTypePCMU, ClockRate: 8000,
-	}, "browser-mic", "test")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := pc.AddTrack(browserAudio); err != nil {
-		t.Fatal(err)
-	}
 	connected := make(chan struct{})
 	var connectedOnce sync.Once
 	pc.OnConnectionStateChange(func(state webrtc.PeerConnectionState) {
@@ -189,7 +179,7 @@ func TestCallVideoRelay(t *testing.T) {
 		t.Fatal(err)
 	}
 	<-webrtc.GatheringCompletePromise(pc)
-	viewerAnswer, err := srv.HandleWebRTCOffer(context.Background(), active[0].CallID, pc.LocalDescription().SDP)
+	viewerAnswer, err := srv.HandleWebRTCOffer(context.Background(), active[0].CallID, pc.LocalDescription().SDP, false)
 	if err != nil {
 		t.Fatalf("webrtc offer: %v", err)
 	}
@@ -207,17 +197,6 @@ func TestCallVideoRelay(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer callerAudio.Close()
-	var browserAudioGot atomic.Int32
-	go func() {
-		buf := make([]byte, 2048)
-		for {
-			_ = callerAudio.SetReadDeadline(time.Now().Add(3 * time.Second))
-			if _, _, err := callerAudio.ReadFromUDP(buf); err != nil {
-				return
-			}
-			browserAudioGot.Add(1)
-		}
-	}()
 	callerVideo, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 28112})
 	if err != nil {
 		t.Fatal(err)
@@ -258,20 +237,6 @@ func TestCallVideoRelay(t *testing.T) {
 		t.Fatal("WebRTC viewer did not connect")
 	}
 	time.Sleep(200 * time.Millisecond)
-	for i := 0; i < 100; i++ {
-		pkt := &rtp.Packet{
-			Header:  rtp.Header{Version: 2, PayloadType: 0, SequenceNumber: uint16(i), Timestamp: uint32(i * 160), SSRC: 0x1122},
-			Payload: make([]byte, 160),
-		}
-		if err := browserAudio.WriteRTP(pkt); err != nil {
-			t.Fatal(err)
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	time.Sleep(500 * time.Millisecond)
-	if browserAudioGot.Load() == 0 {
-		t.Fatal("SIP caller received no browser audio")
-	}
 
 	audioDst := &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: answer.AudioPort}
 	for i := 0; i < 20; i++ {

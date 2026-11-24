@@ -162,6 +162,22 @@
 {"enabled":true,"pin_required":false}
 ```
 
+### POST `/api/v1/webrtc/offer`
+
+查看通话视频：
+
+```json
+{"call_id":"...","sdp":"..."}
+```
+
+默认只收音频/视频，不启用浏览器麦克风。门口机对讲才传：
+
+```json
+{"call_id":"...","sdp":"...","talkback":true}
+```
+
+非门口机通话或报警通话传 `talkback:true` 会返回 400。
+
 ### POST `/api/v1/paging/webrtc`
 
 ```json

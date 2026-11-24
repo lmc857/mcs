@@ -234,8 +234,9 @@ func (s *Server) deviceDelete(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) webrtcOffer(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		CallID string `json:"call_id"`
-		SDP    string `json:"sdp"`
+		CallID   string `json:"call_id"`
+		SDP      string `json:"sdp"`
+		Talkback bool   `json:"talkback"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.CallID == "" || req.SDP == "" {
 		writeJSON(w, 400, map[string]any{"code": "VALIDATION_FAILED", "message": "call_id and sdp are required"})
@@ -243,7 +244,7 @@ func (s *Server) webrtcOffer(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
-	answer, err := s.sip.HandleWebRTCOffer(ctx, req.CallID, req.SDP)
+	answer, err := s.sip.HandleWebRTCOffer(ctx, req.CallID, req.SDP, req.Talkback)
 	if err != nil {
 		writeJSON(w, 409, map[string]any{"code": "WEBRTC_FAILED", "message": err.Error()})
 		return

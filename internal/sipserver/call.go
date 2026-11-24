@@ -23,6 +23,7 @@ type CallView struct {
 	State     string `json:"state"`
 	StartedAt string `json:"started_at"`
 	Video     bool   `json:"video"`
+	Alarm     bool   `json:"alarm"`
 }
 
 type alarmTarget struct {
@@ -1036,6 +1037,7 @@ func (s *Server) ActiveCalls() []CallView {
 		}
 		to := c.to
 		video := c.videoTap != nil
+		alarm := c.alarmID != ""
 		c.stateMu.RUnlock()
 		out = append(out, CallView{
 			CallID:    c.id,
@@ -1044,6 +1046,7 @@ func (s *Server) ActiveCalls() []CallView {
 			State:     state,
 			StartedAt: c.startAt.Format(time.RFC3339),
 			Video:     video,
+			Alarm:     alarm,
 		})
 	}
 	return out

@@ -982,6 +982,7 @@ function renderCalls(data){
       <td class="badge">${time(c.started_at)}</td>
       <td>
         ${c.video ? `<button class="test-btn" onclick="startVideo('${esc(c.call_id)}')">视频</button>` : ''}
+        ${c.video && !c.alarm && ((c.from || '').startsWith('6') || (c.to || '').startsWith('6')) ? `<button class="test-btn" onclick="startVideo('${esc(c.call_id)}', true)">视频对讲</button>` : ''}
         ${c.state === 'answered' ? `<button class="test-btn" onclick="unlockCall('${esc(c.call_id)}')">开锁</button>` : ''}
         <a href="/api/v1/devices/${encodeURIComponent((c.from || '').startsWith('6') ? c.from : (c.to || ''))}/snapshot?ts=${Date.now()}" target="_blank">抓拍</a>
       </td>
@@ -1309,15 +1310,23 @@ function waitICE(pc){
   });
 }
 
-async function startVideo(callId){
+async function startVideo(callId, talkback = false){
   closeVideo();
   const pc = new RTCPeerConnection({iceServers: []});
   viewerPC = pc;
   pc.addTransceiver('video', {direction: 'recvonly'});
-  try{
-    viewerMic = await navigator.mediaDevices.getUserMedia({audio: true});
-    viewerMic.getAudioTracks().forEach(t => pc.addTrack(t, viewerMic));
-  }catch(e){
+  if(talkback){
+    try{
+      viewerMic = await navigator.mediaDevices.getUserMedia({
+        audio: {echoCancellation:true, noiseSuppression:true, autoGainControl:true}
+      });
+      viewerMic.getAudioTracks().forEach(t => pc.addTrack(t, viewerMic));
+    }catch(e){
+      alert('无法打开麦克风，改为只看视频：' + e.message);
+      talkback = false;
+      pc.addTransceiver('audio', {direction: 'recvonly'});
+    }
+  }else{
     pc.addTransceiver('audio', {direction: 'recvonly'});
   }
   pc.ontrack = e => { $('video-el').srcObject = e.streams[0] || new MediaStream([e.track]); };
@@ -1328,7 +1337,7 @@ async function startVideo(callId){
     await waitICE(pc);
     const res = await fetch('/api/v1/webrtc/offer', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({call_id: callId, sdp: pc.localDescription.sdp})
+      body: JSON.stringify({call_id: callId, sdp: pc.localDescription.sdp, talkback: !!talkback})
     });
     const data = await res.json().catch(() => ({}));
     if(!res.ok) throw new Error(data.message || ('HTTP ' + res.status));
