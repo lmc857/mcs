@@ -50,7 +50,7 @@ body { margin:0; color:var(--ink); font-family:"PingFang SC","Microsoft YaHei","
   <div class="kicker">报警 · 对讲 · 广播融合通信服务器</div>
   <h1>MCS 用户<br>使用手册</h1>
   <div class="rule"></div>
-  <div class="meta">适用版本：MCS 0.10.0<br>文档版本：2026-11-23<br>适用对象：值班人员、操作员、系统管理员</div>
+  <div class="meta">适用版本：MCS 0.11.0<br>文档版本：2026-11-23<br>适用对象：值班人员、操作员、系统管理员</div>
   <div class="foot">覆盖设备、报警、对讲、广播、寻呼、会议、系统设置与运维。<br>请结合实际网络、分区和设备配置使用。</div>
 </section>
 <nav class="toc">
@@ -355,7 +355,37 @@ SIP 端口：5060（或实际配置）
 <li>SIP INVITE；</li>
 <li>RTP/RTCP。</li>
 </ul>
-<h3>5.4 在线与租期</h3>
+<h3>5.4 SIP TLS / HTTPS / SRTP 设置</h3>
+<p>管理员可以在网页直接配置，不需要编辑 <code>config.yaml</code>：</p>
+<pre><code class="language-text">配置 → 系统设置 → 服务器设置
+</code></pre>
+<p><img src="images/console-tls.png" alt="TLS/SRTP 设置"></p>
+<p>可设置：</p>
+<ul>
+<li>SIP TLS 监听，例如 <code>0.0.0.0:5061</code>；</li>
+<li>TLS 证书和私钥路径（PEM）；</li>
+<li>信任的终端 CA；</li>
+<li>内网测试可勾选“跳过终端 SIP TLS 证书校验”；</li>
+<li>HTTPS 监听、HTTPS 证书/私钥；</li>
+<li>SRTP 模式：自动 / 必须 / 关闭。</li>
+</ul>
+<p>保存后点击“重启服务器”生效。</p>
+<p>终端使用 TLS 时：</p>
+<pre><code class="language-text">SIP 端口：5061
+传输：TLS
+</code></pre>
+<p>SRTP 是终端在 SDP 中协商的：</p>
+<pre><code class="language-text">m=audio ... RTP/SAVP 0
+a=crypto:1 AES_CM_128_HMAC_SHA1_80 inline:...
+</code></pre>
+<p>注意：</p>
+<ul>
+<li>只支持 SDES-SRTP，不支持 SIP 终端 DTLS-SRTP；</li>
+<li>SRTP 模式只作用于点对点通话和报警呼叫；</li>
+<li>广播、寻呼、会议仍使用明文 RTP；</li>
+<li>SDES 密钥在 SDP 中，生产环境应同时启用 SIP TLS。</li>
+</ul>
+<h3>5.5 在线与租期</h3>
 <p>MCS 按注册租期判断在线：</p>
 <ul>
 <li>默认租期 300 秒；</li>
@@ -364,7 +394,7 @@ SIP 端口：5060（或实际配置）
 <li>可启用 SIP OPTIONS 心跳加快离线检测。</li>
 </ul>
 <p>心跳配置在“系统设置”，默认关闭。</p>
-<h3>5.5 删除设备</h3>
+<h3>5.6 删除设备</h3>
 <p>在设备列表点击“删除”。</p>
 <p>删除后：</p>
 <ul>

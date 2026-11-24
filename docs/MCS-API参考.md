@@ -255,6 +255,24 @@ operator/admin 可操作，viewer 只读。
 
 ### GET `/api/v1/system/settings`
 
+服务器设置已支持 TLS/SRTP 字段：
+
+```json
+{
+  "sip_tls": "0.0.0.0:5061",
+  "tls_cert": "C:/ProgramData/MCS/certs/server.crt",
+  "tls_key": "C:/ProgramData/MCS/certs/server.key",
+  "tls_ca": "",
+  "tls_insecure": false,
+  "https": "0.0.0.0:8443",
+  "https_cert": "",
+  "https_key": "",
+  "srtp_mode": "auto"
+}
+```
+
+`PUT /api/v1/system/settings` 保存后需要重启；证书文件必须存在且证书/私钥匹配。
+
 ```json
 {"active":{"advertise":"192.168.68.106:5060","sip_udp":"0.0.0.0:5060","http":"0.0.0.0:8080","https":"","domain":"mcs.local","alarm_number":"8000","auto_answer":"...","transcode":false},
  "pending":{...},"restart_required":true}

@@ -49,6 +49,7 @@ type Server struct {
 	mediaTranscode  bool
 	zonesMu         sync.RWMutex
 	zones           []zone
+	srtpMode        string
 	ttsMu           sync.RWMutex
 	ttsCfg          config.TTSConfig
 	ttsClient       *tts.Client
@@ -64,22 +65,28 @@ type Server struct {
 
 // Options carries the runtime configuration for the SIP server.
 type Options struct {
-	Domain       string
-	Advertise    string
-	DataDir      string
-	Alarm        config.AlarmConfig
-	Registration config.RegistrationConfig
-	Broadcast    config.BroadcastConfig
-	Paging       config.PagingConfig
-	Conference   config.ConferenceConfig
-	License      *license.Manager
-	Media        config.MediaConfig
-	TTS          config.TTSConfig
-	Zones        []config.ZoneConfig
+	Domain          string
+	Advertise       string
+	DataDir         string
+	Alarm           config.AlarmConfig
+	Registration    config.RegistrationConfig
+	Broadcast       config.BroadcastConfig
+	Paging          config.PagingConfig
+	Conference      config.ConferenceConfig
+	License         *license.Manager
+	Media           config.MediaConfig
+	TTS             config.TTSConfig
+	Zones           []config.ZoneConfig
+	SRTPMode        string
+	TLSClientConfig *tls.Config
 }
 
 func New(st *store.Store, auth *Authenticator, cdr *store.CDRStore, alarms *store.AlarmStore, opts Options, log *slog.Logger) (*Server, error) {
-	ua, err := sipgo.NewUA(sipgo.WithUserAgent(serverName))
+	uaOpts := []sipgo.UserAgentOption{sipgo.WithUserAgent(serverName)}
+	if opts.TLSClientConfig != nil {
+		uaOpts = append(uaOpts, sipgo.WithUserAgenTLSConfig(opts.TLSClientConfig))
+	}
+	ua, err := sipgo.NewUA(uaOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("sip ua: %w", err)
 	}
@@ -117,6 +124,7 @@ func New(st *store.Store, auth *Authenticator, cdr *store.CDRStore, alarms *stor
 		conferenceAudio: config.NormalizeConferenceAudio(opts.Conference.Audio),
 		mediaTranscode:  opts.Media.Transcode,
 		zones:           buildZones(opts.Zones, st),
+		srtpMode:        opts.SRTPMode,
 		ttsCfg:          opts.TTS,
 		ttsClient: tts.NewFromConfig(tts.Config{
 			Provider: opts.TTS.Provider, BaseURL: opts.TTS.BaseURL, APIKey: opts.TTS.APIKey,
@@ -285,7 +293,7 @@ func (s *Server) onRegister(req *sip.Request, tx sip.ServerTransaction) {
 	ua := headerValue(req, "User-Agent")
 	model := headerValue(req, "X-MCS-Model")
 	firmware := headerValue(req, "X-MCS-Firmware")
-	if !s.store.Register(ext, contact, src, ua, model, firmware, time.Duration(ttl)*time.Second) {
+	if !s.store.Register(ext, contact, src, strings.ToLower(req.Transport()), ua, model, firmware, time.Duration(ttl)*time.Second) {
 		s.respond(req, tx, 403, "Forbidden")
 		return
 	}

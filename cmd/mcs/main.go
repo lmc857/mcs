@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -166,10 +167,28 @@ func runServer(parent context.Context, configPath, logPath string, serviceMode b
 		var saved config.ServerSettings
 		if err := json.Unmarshal([]byte(raw), &saved); err != nil {
 			logger.Warn("ignore invalid server settings", "error", err)
-		} else if err := cfg.ApplyServerSettings(saved); err != nil {
-			logger.Warn("ignore invalid server settings", "error", err)
 		} else {
-			logger.Info("server settings loaded from db", "advertise", saved.Advertise, "http", saved.HTTP, "sip_udp", saved.SIPUDP)
+			// Settings saved before 0.11.0 have no TLS fields. Preserve the
+			// certificate paths already configured in YAML on upgrade.
+			if saved.Version == 0 {
+				if saved.SIPTLS == "" {
+					saved.SIPTLS = cfg.Server.SIPTLS
+					saved.TLSCert = cfg.Server.TLSCert
+					saved.TLSKey = cfg.Server.TLSKey
+					saved.TLSCA = cfg.Server.TLSCA
+					saved.TLSInsecure = cfg.Server.TLSInsecure
+					saved.HTTPSCert = cfg.Server.HTTPSCert
+					saved.HTTPSKey = cfg.Server.HTTPSKey
+				}
+				if saved.SRTPMode == "" {
+					saved.SRTPMode = cfg.Server.SRTPMode
+				}
+			}
+			if err := cfg.ApplyServerSettings(saved); err != nil {
+				logger.Warn("ignore invalid server settings", "error", err)
+			} else {
+				logger.Info("server settings loaded from db", "advertise", saved.Advertise, "http", saved.HTTP, "sip_udp", saved.SIPUDP)
+			}
 		}
 	}
 	if raw, ok := db.GetSetting("conference_audio"); ok {
@@ -204,6 +223,10 @@ func runServer(parent context.Context, configPath, logPath string, serviceMode b
 			}
 		}
 	}
+	tlsClient, err := buildTLSClientConfig(cfg.Server)
+	if err != nil {
+		return fmt.Errorf("SIP TLS client config: %w", err)
+	}
 	st := store.NewWithDB(cfg.Devices, db)
 	cdr := store.NewCDRStoreDB(2000, db)
 	alarms := store.NewAlarmStoreDB(1000, db)
@@ -211,6 +234,7 @@ func runServer(parent context.Context, configPath, logPath string, serviceMode b
 	sipSrv, err := sipserver.New(st, auth, cdr, alarms, sipserver.Options{
 		Domain: cfg.Server.Domain, Advertise: cfg.Server.Advertise, DataDir: cfg.Storage.DataDir,
 		Alarm: cfg.Alarm, Registration: cfg.Registration, Broadcast: cfg.Broadcast, Paging: cfg.Paging, Conference: cfg.Conference, Media: cfg.Media, TTS: ttsCfg, Zones: cfg.Zones, License: lic,
+		TLSClientConfig: tlsClient, SRTPMode: cfg.Server.SRTPMode,
 	}, logger)
 	if err != nil {
 		return fmt.Errorf("init sip server: %w", err)
@@ -302,4 +326,23 @@ func runServer(parent context.Context, configPath, logPath string, serviceMode b
 	}
 	_ = sipSrv.Close()
 	return nil
+}
+
+func buildTLSClientConfig(sc config.ServerConfig) (*tls.Config, error) {
+	if sc.TLSCA == "" && !sc.TLSInsecure {
+		return nil, nil
+	}
+	cfg := &tls.Config{MinVersion: tls.VersionTLS12, InsecureSkipVerify: sc.TLSInsecure}
+	if sc.TLSCA != "" {
+		data, err := os.ReadFile(sc.TLSCA)
+		if err != nil {
+			return nil, fmt.Errorf("read tls_ca: %w", err)
+		}
+		pool := x509.NewCertPool()
+		if !pool.AppendCertsFromPEM(data) {
+			return nil, fmt.Errorf("tls_ca has no valid PEM certificate")
+		}
+		cfg.RootCAs = pool
+	}
+	return cfg, nil
 }

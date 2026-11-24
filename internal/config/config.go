@@ -26,16 +26,19 @@ type Config struct {
 }
 
 type ServerConfig struct {
-	SIPUDP    string `yaml:"sip_udp"`
-	SIPTLS    string `yaml:"sip_tls"`  // 可选，例如 0.0.0.0:5061
-	TLSCert   string `yaml:"tls_cert"` // PEM 证书
-	TLSKey    string `yaml:"tls_key"`  // PEM 私钥
-	HTTP      string `yaml:"http"`
-	HTTPS     string `yaml:"https"`      // 可选，例如 0.0.0.0:8443
-	HTTPSCert string `yaml:"https_cert"` // 为空时复用 tls_cert
-	HTTPSKey  string `yaml:"https_key"`  // 为空时复用 tls_key
-	Domain    string `yaml:"domain"`
-	Advertise string `yaml:"advertise"`
+	SIPUDP      string `yaml:"sip_udp"`
+	SIPTLS      string `yaml:"sip_tls"`      // 可选，例如 0.0.0.0:5061
+	TLSCert     string `yaml:"tls_cert"`     // PEM 证书
+	TLSKey      string `yaml:"tls_key"`      // PEM 私钥
+	TLSCA       string `yaml:"tls_ca"`       // 可选，终端自签/私有 CA
+	TLSInsecure bool   `yaml:"tls_insecure"` // 仅内网测试：跳过 SIP TLS 终端证书校验
+	SRTPMode    string `yaml:"srtp_mode"`    // auto | required | off
+	HTTP        string `yaml:"http"`
+	HTTPS       string `yaml:"https"`      // 可选，例如 0.0.0.0:8443
+	HTTPSCert   string `yaml:"https_cert"` // 为空时复用 tls_cert
+	HTTPSKey    string `yaml:"https_key"`  // 为空时复用 tls_key
+	Domain      string `yaml:"domain"`
+	Advertise   string `yaml:"advertise"`
 }
 
 type StorageConfig struct {
@@ -195,6 +198,9 @@ func Load(path string) (Config, error) {
 	}
 	if cfg.Server.Advertise == "" {
 		cfg.Server.Advertise = "127.0.0.1:5060"
+	}
+	if cfg.Server.SRTPMode == "" {
+		cfg.Server.SRTPMode = "auto"
 	}
 	if cfg.Storage.DataDir == "" {
 		cfg.Storage.DataDir = "./data"

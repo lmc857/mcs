@@ -43,7 +43,7 @@ func TestHeartbeatOptions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !st.Register("1001", "<sip:1001@127.0.0.1:15074>", "127.0.0.1:15074", "", "", "", time.Minute) {
+	if !st.Register("1001", "<sip:1001@127.0.0.1:15074>", "127.0.0.1:15074", "udp", "", "", "", time.Minute) {
 		t.Fatal("register failed")
 	}
 	view, _ := st.Get("1001")

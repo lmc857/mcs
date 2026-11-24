@@ -2,6 +2,8 @@ package api
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -757,12 +759,17 @@ func (s *Server) systemSettingsSave(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 400, map[string]any{"code": "VALIDATION_FAILED", "message": "invalid json"})
 		return
 	}
+	v.Version = 2
 	if err := config.ValidateServerSettings(v); err != nil {
 		writeJSON(w, 400, map[string]any{"code": "VALIDATION_FAILED", "message": err.Error()})
 		return
 	}
 	if err := checkChangedListeners(s.activeSettings, v); err != nil {
 		writeJSON(w, 400, map[string]any{"code": "PORT_UNAVAILABLE", "message": err.Error()})
+		return
+	}
+	if err := validateCertificateFiles(v); err != nil {
+		writeJSON(w, 400, map[string]any{"code": "VALIDATION_FAILED", "message": err.Error()})
 		return
 	}
 	raw, _ := json.Marshal(v)
@@ -838,6 +845,7 @@ func checkChangedListeners(old, next config.ServerSettings) error {
 	for _, c := range []check{
 		{"http", old.HTTP, next.HTTP, "tcp"},
 		{"https", old.HTTPS, next.HTTPS, "tcp"},
+		{"sip_tls", old.SIPTLS, next.SIPTLS, "tcp"},
 		{"sip_udp", old.SIPUDP, next.SIPUDP, "udp"},
 	} {
 		if c.newAddr == "" || c.newAddr == c.oldAddr {
@@ -1266,4 +1274,34 @@ func writeJSON(w http.ResponseWriter, code int, v any) {
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(code)
 	_ = json.NewEncoder(w).Encode(v)
+}
+
+func validateCertificateFiles(v config.ServerSettings) error {
+	if v.SIPTLS != "" {
+		if _, err := tls.LoadX509KeyPair(v.TLSCert, v.TLSKey); err != nil {
+			return fmt.Errorf("SIP TLS 证书/私钥不可用: %w", err)
+		}
+	}
+	if v.HTTPS != "" {
+		cert, key := v.HTTPSCert, v.HTTPSKey
+		if cert == "" {
+			cert, key = v.TLSCert, v.TLSKey
+		}
+		if cert == "" || key == "" {
+			return fmt.Errorf("HTTPS 需要证书和私钥，或先配置 SIP TLS 证书")
+		}
+		if _, err := tls.LoadX509KeyPair(cert, key); err != nil {
+			return fmt.Errorf("HTTPS 证书/私钥不可用: %w", err)
+		}
+	}
+	if v.TLSCA != "" {
+		data, err := os.ReadFile(v.TLSCA)
+		if err != nil {
+			return fmt.Errorf("读取 TLS CA 失败: %w", err)
+		}
+		if !x509.NewCertPool().AppendCertsFromPEM(data) {
+			return fmt.Errorf("TLS CA 不是有效 PEM 证书")
+		}
+	}
+	return nil
 }

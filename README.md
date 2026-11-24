@@ -31,9 +31,9 @@
 
 | 能力 | 状态 |
 | --- | --- |
-| SIP 注册（UDP） | ✅ Digest 鉴权、源地址记录、过期、注销、OPTIONS 保活响应 |
+| SIP 注册 | ✅ UDP/TCP/TLS、Digest 鉴权、源地址记录、过期、注销、OPTIONS 保活 |
 | 呼叫（B2BUA） | ✅ INVITE/180/200/ACK/BYE/CANCEL，8xxx 报警短号路由 |
-| RTP 中继 | ✅ 双向中继、SDP 改写、首包锁存（NAT 基础） |
+| RTP / SRTP | ✅ 双向中继、SDP 改写、首包锁存、SDES-SRTP（自动/必须/关闭）、网页 TLS/SRTP 配置 |
 | G.711 转码 | ⚙️ 可选兼容层，默认关闭；`media.transcode: true` 才启用 |
 | 录音 / 话单 | ✅ 双向 G.711 → 立体声 WAV；CDR 含结果/时长/录音链接 |
 | 报警策略 / 升级 | ✅ config.yaml 配置多级值班；超时自动取消并呼下一级 |

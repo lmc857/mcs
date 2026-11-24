@@ -10,10 +10,19 @@ import (
 // ServerSettings are the allowlisted fields that can be edited from the
 // web console. They are persisted in SQLite and applied on process start.
 type ServerSettings struct {
+	Version            int    `json:"settings_version,omitempty"`
 	Advertise          string `json:"advertise"`
 	SIPUDP             string `json:"sip_udp"`
 	HTTP               string `json:"http"`
 	HTTPS              string `json:"https"`
+	SIPTLS             string `json:"sip_tls"`
+	TLSCert            string `json:"tls_cert"`
+	TLSKey             string `json:"tls_key"`
+	TLSCA              string `json:"tls_ca"`
+	TLSInsecure        bool   `json:"tls_insecure"`
+	HTTPSCert          string `json:"https_cert"`
+	HTTPSKey           string `json:"https_key"`
+	SRTPMode           string `json:"srtp_mode"`
 	Domain             string `json:"domain"`
 	AlarmNumber        string `json:"alarm_number"`
 	AutoAnswer         string `json:"auto_answer"`
@@ -25,11 +34,24 @@ type ServerSettings struct {
 }
 
 func (c Config) ServerSettings() ServerSettings {
+	srtpMode := c.Server.SRTPMode
+	if srtpMode == "" {
+		srtpMode = "auto"
+	}
 	return ServerSettings{
+		Version:     2,
 		Advertise:   c.Server.Advertise,
 		SIPUDP:      c.Server.SIPUDP,
 		HTTP:        c.Server.HTTP,
 		HTTPS:       c.Server.HTTPS,
+		SIPTLS:      c.Server.SIPTLS,
+		TLSCert:     c.Server.TLSCert,
+		TLSKey:      c.Server.TLSKey,
+		TLSCA:       c.Server.TLSCA,
+		TLSInsecure: c.Server.TLSInsecure,
+		HTTPSCert:   c.Server.HTTPSCert,
+		HTTPSKey:    c.Server.HTTPSKey,
+		SRTPMode:    srtpMode,
 		Domain:      c.Server.Domain,
 		AlarmNumber: c.Alarm.Number,
 		AutoAnswer:  c.Broadcast.AutoAnswer,
@@ -41,10 +63,21 @@ func (c *Config) ApplyServerSettings(v ServerSettings) error {
 	if err := ValidateServerSettings(v); err != nil {
 		return err
 	}
+	if v.SRTPMode == "" {
+		v.SRTPMode = "auto"
+	}
 	c.Server.Advertise = v.Advertise
 	c.Server.SIPUDP = v.SIPUDP
 	c.Server.HTTP = v.HTTP
 	c.Server.HTTPS = v.HTTPS
+	c.Server.SIPTLS = v.SIPTLS
+	c.Server.TLSCert = v.TLSCert
+	c.Server.TLSKey = v.TLSKey
+	c.Server.TLSCA = v.TLSCA
+	c.Server.TLSInsecure = v.TLSInsecure
+	c.Server.HTTPSCert = v.HTTPSCert
+	c.Server.HTTPSKey = v.HTTPSKey
+	c.Server.SRTPMode = v.SRTPMode
 	c.Server.Domain = v.Domain
 	c.Alarm.Number = v.AlarmNumber
 	c.Broadcast.AutoAnswer = v.AutoAnswer
@@ -70,6 +103,25 @@ func ValidateServerSettings(v ServerSettings) error {
 	}
 	if err := validateHostPort("https", v.HTTPS, true, false); err != nil {
 		return err
+	}
+	if err := validateHostPort("sip_tls", v.SIPTLS, true, false); err != nil {
+		return err
+	}
+	switch v.SRTPMode {
+	case "", "auto":
+	case "required", "off":
+	default:
+		return fmt.Errorf("srtp_mode 必须是 auto、required 或 off")
+	}
+	if v.SIPTLS != "" {
+		if strings.TrimSpace(v.TLSCert) == "" || strings.TrimSpace(v.TLSKey) == "" {
+			return fmt.Errorf("启用 SIP TLS 时必须填写证书和私钥路径")
+		}
+	}
+	if v.HTTPS != "" && (v.HTTPSCert != "" || v.HTTPSKey != "") {
+		if v.HTTPSCert == "" || v.HTTPSKey == "" {
+			return fmt.Errorf("HTTPS 证书和私钥必须同时填写")
+		}
 	}
 	if strings.TrimSpace(v.Domain) == "" {
 		return fmt.Errorf("domain 不能为空")

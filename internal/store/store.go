@@ -21,6 +21,7 @@ type Device struct {
 	Enabled   bool
 	Contact   string
 	Source    string
+	Transport string
 	UserAgent string
 	Model     string
 	Firmware  string
@@ -37,6 +38,7 @@ type View struct {
 	Online    bool   `json:"online"`
 	Contact   string `json:"contact"`
 	Source    string `json:"source"`
+	Transport string `json:"transport,omitempty"`
 	UserAgent string `json:"user_agent"`
 	Model     string `json:"model"`
 	Firmware  string `json:"firmware"`
@@ -179,7 +181,7 @@ func (s *Store) Password(ext string) (string, bool) {
 }
 
 // Register stores a contact and returns false when the extension is unknown.
-func (s *Store) Register(ext, contact, source, ua, model, firmware string, ttl time.Duration) bool {
+func (s *Store) Register(ext, contact, source, transport, ua, model, firmware string, ttl time.Duration) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	d, ok := s.devices[ext]
@@ -189,6 +191,7 @@ func (s *Store) Register(ext, contact, source, ua, model, firmware string, ttl t
 	now := time.Now()
 	d.Contact = contact
 	d.Source = source
+	d.Transport = transport
 	d.UserAgent = ua
 	d.Model = model
 	d.Firmware = firmware
@@ -225,6 +228,7 @@ func (s *Store) Unregister(ext string) bool {
 	}
 	d.Contact = ""
 	d.Source = ""
+	d.Transport = ""
 	d.ExpiresAt = time.Time{}
 	d.LastSeen = time.Now()
 	return true
@@ -244,6 +248,7 @@ func (s *Store) List() []View {
 			Zone:      d.Zone,
 			Contact:   d.Contact,
 			Source:    d.Source,
+			Transport: d.Transport,
 			UserAgent: d.UserAgent,
 			Model:     d.Model,
 			Firmware:  d.Firmware,

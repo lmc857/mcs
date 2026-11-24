@@ -6,6 +6,9 @@ server:
   # sip_tls: "0.0.0.0:5061"
   # tls_cert: "/etc/mcs/tls/server.crt"
   # tls_key: "/etc/mcs/tls/server.key"
+  # tls_ca: "/etc/mcs/tls/phone-ca.crt"  # 可选：信任终端自签/私有 CA
+  # tls_insecure: false                   # 仅内网测试可跳过终端证书校验
+  # srtp_mode: "auto"                    # auto | required | off
   # 管理/调度台 HTTP 地址；生产建议 0.0.0.0:8080 + 反向代理 HTTPS
   http: "127.0.0.1:8080"
   # 可选 HTTPS 控制台；证书为空时复用 tls_cert/tls_key

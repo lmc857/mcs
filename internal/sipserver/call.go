@@ -169,6 +169,10 @@ func (s *Server) handleInvite(req *sip.Request, tx sip.ServerTransaction) {
 		s.respond(req, tx, 488, "Not Acceptable Here")
 		return
 	}
+	if err := s.checkSRTPPolicy(offer); err != nil {
+		s.respond(req, tx, 488, err.Error())
+		return
+	}
 	dss, err := s.dua.ReadInvite(req, tx)
 	if err != nil {
 		s.log.Warn("read invite", "error", err, "from", from)
@@ -1062,9 +1066,6 @@ func contactURI(raw string) (sip.Uri, error) {
 			s = s[i+1 : i+j]
 		}
 	}
-	if i := strings.Index(s, ";"); i > 0 {
-		s = s[:i]
-	}
 	var u sip.Uri
 	if err := sip.ParseUri(s, &u); err != nil {
 		return sip.Uri{}, err
@@ -1079,6 +1080,11 @@ func contactURIForView(v store.View) (sip.Uri, error) {
 	uri, err := contactURI(v.Contact)
 	if err != nil {
 		return sip.Uri{}, err
+	}
+	if v.Transport != "" {
+		if _, ok := uri.UriParams.Get("transport"); !ok {
+			uri.UriParams.Add("transport", v.Transport)
+		}
 	}
 	ip := net.ParseIP(uri.Host)
 	if ip == nil {
@@ -1145,4 +1151,21 @@ func codecFor(info sdpInfo) string {
 		return "PCMA"
 	}
 	return "PCMU"
+}
+
+func (s *Server) checkSRTPPolicy(offer sdpInfo) error {
+	switch s.srtpMode {
+	case "required":
+		if !offer.AudioSecure || !offer.AudioCrypto.OK {
+			return fmt.Errorf("SRTP Required")
+		}
+		if offer.HasVideo && (!offer.VideoSecure || !offer.VideoCrypto.OK) {
+			return fmt.Errorf("SRTP Required")
+		}
+	case "off":
+		if offer.AudioSecure || (offer.HasVideo && offer.VideoSecure) {
+			return fmt.Errorf("SRTP Disabled")
+		}
+	}
+	return nil
 }

@@ -547,6 +547,9 @@ textarea.bc-text{margin:0 17px 12px;width:calc(100% - 34px)}
             <label class="field">HTTPS 监听（留空关闭）
               <input type="text" id="settings-https" placeholder="0.0.0.0:8443">
             </label>
+            <label class="field">SIP TLS 监听（留空关闭）
+              <input type="text" id="settings-sip-tls" placeholder="0.0.0.0:5061">
+            </label>
             <label class="field">SIP 域名
               <input type="text" id="settings-domain" placeholder="mcs.local">
             </label>
@@ -554,6 +557,33 @@ textarea.bc-text{margin:0 17px 12px;width:calc(100% - 34px)}
               <input type="text" id="settings-alarm" placeholder="8000">
             </label>
             <label class="hint" style="align-self:flex-end"><input type="checkbox" id="settings-transcode"> G.711 转码</label>
+          </div>
+          <div class="form">
+            <label class="field" style="flex:1 1 48%">TLS 证书路径（PEM）
+              <input type="text" id="settings-tls-cert" placeholder="C:/ProgramData/MCS/certs/server.crt">
+            </label>
+            <label class="field" style="flex:1 1 48%">TLS 私钥路径（PEM）
+              <input type="text" id="settings-tls-key" placeholder="C:/ProgramData/MCS/certs/server.key">
+            </label>
+            <label class="field" style="flex:1 1 48%">信任的终端 CA（可选）
+              <input type="text" id="settings-tls-ca" placeholder="C:/ProgramData/MCS/certs/phone-ca.crt">
+            </label>
+            <label class="hint" style="align-self:flex-end"><input type="checkbox" id="settings-tls-insecure"> 跳过终端 SIP TLS 证书校验（仅内网测试）</label>
+          </div>
+          <div class="form">
+            <label class="field" style="flex:1 1 48%">HTTPS 证书（留空复用 TLS 证书）
+              <input type="text" id="settings-https-cert" placeholder="C:/ProgramData/MCS/certs/console.crt">
+            </label>
+            <label class="field" style="flex:1 1 48%">HTTPS 私钥（留空复用 TLS 私钥）
+              <input type="text" id="settings-https-key" placeholder="C:/ProgramData/MCS/certs/console.key">
+            </label>
+            <label class="field">SRTP 模式
+              <select id="settings-srtp-mode">
+                <option value="auto">自动协商（推荐）</option>
+                <option value="required">必须 SRTP</option>
+                <option value="off">关闭 SRTP</option>
+              </select>
+            </label>
           </div>
           <div class="form">
             <label class="field" style="flex:1 1 100%">Alert-Info 自动应答头
@@ -1899,6 +1929,14 @@ async function loadServerSettings(){
     $('settings-sip-udp').value = p.sip_udp || '';
     $('settings-http').value = p.http || '';
     $('settings-https').value = p.https || '';
+    $('settings-sip-tls').value = p.sip_tls || '';
+    $('settings-tls-cert').value = p.tls_cert || '';
+    $('settings-tls-key').value = p.tls_key || '';
+    $('settings-tls-ca').value = p.tls_ca || '';
+    $('settings-tls-insecure').checked = !!p.tls_insecure;
+    $('settings-https-cert').value = p.https_cert || '';
+    $('settings-https-key').value = p.https_key || '';
+    $('settings-srtp-mode').value = p.srtp_mode || 'auto';
     $('settings-domain').value = p.domain || '';
     $('settings-alarm').value = p.alarm_number || '';
     $('settings-auto-answer').value = p.auto_answer || '';
@@ -1910,7 +1948,7 @@ async function loadServerSettings(){
     $('settings-state').textContent = d.restart_required ? '有未应用修改' : '已生效';
     $('settings-msg').textContent = '';
     const a = d.active || {};
-    $('settings-active').textContent = 'advertise=' + (a.advertise || '—') + '  http=' + (a.http || '—') + '  sip=' + (a.sip_udp || '—') + '  heartbeat=' + (a.heartbeat_enabled ? 'on' : 'off');
+    $('settings-active').textContent = 'advertise=' + (a.advertise || '—') + '  http=' + (a.http || '—') + '  sip=' + (a.sip_udp || '—') + '  sip_tls=' + (a.sip_tls || 'off') + '  https=' + (a.https || 'off') + '  srtp=' + (a.srtp_mode || 'auto') + '  heartbeat=' + (a.heartbeat_enabled ? 'on' : 'off');
   }catch(e){ $('settings-msg').textContent = '读取失败：' + e.message; }
 }
 
@@ -1923,6 +1961,14 @@ async function saveServerSettings(){
     sip_udp: $('settings-sip-udp').value.trim(),
     http: $('settings-http').value.trim(),
     https: $('settings-https').value.trim(),
+    sip_tls: $('settings-sip-tls').value.trim(),
+    tls_cert: $('settings-tls-cert').value.trim(),
+    tls_key: $('settings-tls-key').value.trim(),
+    tls_ca: $('settings-tls-ca').value.trim(),
+    tls_insecure: $('settings-tls-insecure').checked,
+    https_cert: $('settings-https-cert').value.trim(),
+    https_key: $('settings-https-key').value.trim(),
+    srtp_mode: $('settings-srtp-mode').value,
     domain: $('settings-domain').value.trim(),
     alarm_number: $('settings-alarm').value.trim(),
     auto_answer: $('settings-auto-answer').value.trim(),

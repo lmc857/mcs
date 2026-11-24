@@ -223,6 +223,10 @@ server:
 
 只启用 TLS 时，`advertise` 端口改成 5061。终端需信任证书或手动接受自签证书。
 
+0.11.0 起也可以全部在网页“系统设置”中配置，不需要改配置文件。
+
+MCS 出站 B 腿会保留终端注册时的 `transport=tls`，并支持用 `tls_ca` 信任私有 CA；内网测试可开启 `tls_insecure`。
+
 ### 5.2 HTTPS 控制台
 
 ```yaml
@@ -248,6 +252,7 @@ MCS 自动逐腿解密/重加密，支持 `AES_CM_128_HMAC_SHA1_80/32`、音频/
 注意：
 
 - 只支持 **SDES-SRTP**；SIP 终端的 DTLS-SRTP 未实现。
+- 网页可以设置 `srtp_mode`：`auto` / `required` / `off`。
 - SDES 密钥在 SDP 中，**必须配合 SIP over TLS**，否则密钥明文传输。
 - 寻呼、广播、组呼仍是明文 RTP。
 

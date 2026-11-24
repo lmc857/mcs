@@ -1257,10 +1257,16 @@ Linux 单元做了基本加固：`NoNewPrivileges`、`ProtectSystem=strict`、`P
 
 | 目标 | 配置 |
 | --- | --- |
-| SIP over TLS | `server.sip_tls` + `server.tls_cert` + `server.tls_key` |
+| SIP over TLS | `server.sip_tls` + `server.tls_cert` + `server.tls_key`；可在网页“系统设置”修改 |
 | HTTPS 控制台 | `server.https` + `server.https_cert`/`https_key`（可复用 SIP 证书） |
 | SRTP | 终端侧启用 `RTP/SAVP` + `a=crypto`；MCS 自动协商，无需额外开关 |
 | WebRTC | 需要 HTTPS 或 `localhost` 才能用麦克风；Pion 自动 DTLS-SRTP |
+
+0.11.0 起：
+- B 腿会保留注册 Contact/REGISTER transport 的 `transport=tls`，出站 INVITE 使用 TLS；
+- `tls_ca` 用于信任终端私有 CA，`tls_insecure` 仅用于内网自签测试；
+- 网页可配置 `srtp_mode`：`auto` / `required` / `off`；
+- `required` 只作用于点对点/报警呼叫，广播、寻呼、会议仍是明文 RTP。
 
 > SRTP 的 SDES 密钥在 SDP 中；如果 SIP 信令是明文 UDP，密钥也会明文传输。
 > 生产要求 SRTP 时必须同时启用 SIP over TLS。
