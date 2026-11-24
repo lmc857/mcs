@@ -137,7 +137,9 @@
 
 ```json
 {"license_id":"MCS-2026-001","customer":"客户","max_phones":50,
- "status":"licensed","activated":true,"used_phones":12,"online_phones":8}
+ "effective_max_phones":50,"expires_at":"2027-12-31T23:59:59+08:00",
+ "days_left":402,"expired":false,"status":"licensed","activated":true,
+ "used_phones":12,"online_phones":8}
 ```
 
 仅 admin。

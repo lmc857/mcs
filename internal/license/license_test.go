@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestActivationCode(t *testing.T) {
@@ -42,5 +43,51 @@ func TestDefaultEncode(t *testing.T) {
 	pub := DefaultPublicKey()
 	if len(pub) != ed25519.PublicKeySize {
 		t.Fatal("embedded public key invalid")
+	}
+}
+
+func TestActivationExpiry(t *testing.T) {
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 11, 24, 10, 0, 0, 0, time.UTC)
+	m := New(pub, 4)
+	m.now = func() time.Time { return now }
+	code, err := Encode(Payload{
+		Version: 1, LicenseID: "MCS-EXP", Customer: "客户", MaxPhones: 20,
+		ExpiresAt: now.Add(48 * time.Hour).Format(time.RFC3339),
+	}, priv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	info, err := m.Activate(code)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Status != "licensed" || info.DaysLeft != 2 || m.MaxPhones() != 20 {
+		t.Fatalf("fresh info = %+v max=%d", info, m.MaxPhones())
+	}
+	m.now = func() time.Time { return now.Add(49 * time.Hour) }
+	info = m.Info()
+	if info.Status != "expired" || !info.Expired || info.EffectiveMaxPhones != 4 || m.MaxPhones() != 4 {
+		t.Fatalf("expired info = %+v max=%d", info, m.MaxPhones())
+	}
+}
+
+func TestExpiredActivationRejected(t *testing.T) {
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	code, err := Encode(Payload{
+		Version: 1, LicenseID: "MCS-OLD", Customer: "客户", MaxPhones: 20,
+		ExpiresAt: time.Now().Add(-time.Hour).Format(time.RFC3339),
+	}, priv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := New(pub, 4).Activate(code); err == nil {
+		t.Fatal("expired activation accepted")
 	}
 }

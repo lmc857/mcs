@@ -18,6 +18,7 @@ func main() {
 		maxPhones = flag.Int("max-phones", 0, "maximum number of phones")
 		licenseID = flag.String("license-id", "", "license id (default: MCS-<timestamp>)")
 		issuedAt  = flag.String("issued-at", "", "issue time (default: now, RFC3339)")
+		expiresAt = flag.String("expires", "", "expiry date (YYYY-MM-DD or RFC3339); empty = perpetual")
 		out       = flag.String("out", "", "optional output file")
 	)
 	flag.Parse()
@@ -41,9 +42,17 @@ func main() {
 	if *issuedAt == "" {
 		*issuedAt = time.Now().Format(time.RFC3339)
 	}
+	if *expiresAt != "" {
+		if t, err := time.ParseInLocation("2006-01-02", *expiresAt, time.Local); err == nil {
+			*expiresAt = t.Add(24*time.Hour - time.Second).Format(time.RFC3339)
+		} else if _, err := time.Parse(time.RFC3339, *expiresAt); err != nil {
+			fmt.Fprintln(os.Stderr, "expires must be YYYY-MM-DD or RFC3339")
+			os.Exit(2)
+		}
+	}
 	code, err := license.Encode(license.Payload{
 		Version: 1, LicenseID: *licenseID, Customer: *customer,
-		MaxPhones: *maxPhones, IssuedAt: *issuedAt,
+		MaxPhones: *maxPhones, IssuedAt: *issuedAt, ExpiresAt: *expiresAt,
 	}, ed25519.PrivateKey(priv))
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "sign:", err)

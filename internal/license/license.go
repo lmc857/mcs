@@ -9,6 +9,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 	"sync"
 	"time"
@@ -26,22 +27,29 @@ type Payload struct {
 	Customer  string `json:"customer"`
 	MaxPhones int    `json:"max_phones"`
 	IssuedAt  string `json:"issued_at,omitempty"`
+	ExpiresAt string `json:"expires_at,omitempty"`
 }
 
 type Info struct {
-	LicenseID   string `json:"license_id"`
-	Customer    string `json:"customer"`
-	MaxPhones   int    `json:"max_phones"`
-	IssuedAt    string `json:"issued_at,omitempty"`
-	Status      string `json:"status"`
-	Activated   bool   `json:"activated"`
-	ActivatedAt string `json:"activated_at,omitempty"`
+	LicenseID          string `json:"license_id"`
+	Customer           string `json:"customer"`
+	MaxPhones          int    `json:"max_phones"`
+	EffectiveMaxPhones int    `json:"effective_max_phones"`
+	IssuedAt           string `json:"issued_at,omitempty"`
+	ExpiresAt          string `json:"expires_at,omitempty"`
+	DaysLeft           int    `json:"days_left"`
+	Expired            bool   `json:"expired"`
+	Status             string `json:"status"`
+	Activated          bool   `json:"activated"`
+	ActivatedAt        string `json:"activated_at,omitempty"`
 }
 
 type Manager struct {
-	mu   sync.RWMutex
-	pub  ed25519.PublicKey
-	info Info
+	mu    sync.RWMutex
+	pub   ed25519.PublicKey
+	info  Info
+	trial int
+	now   func() time.Time
 }
 
 func DefaultPublicKey() ed25519.PublicKey {
@@ -56,22 +64,59 @@ func New(pub ed25519.PublicKey, trial int) *Manager {
 	if trial <= 0 {
 		trial = trialPhones
 	}
-	return &Manager{pub: pub, info: Info{MaxPhones: trial, Status: "trial", Customer: "未授权"}}
+	return &Manager{pub: pub, trial: trial, info: Info{MaxPhones: trial, EffectiveMaxPhones: trial, Status: "trial", Customer: "未授权"}, now: time.Now}
 }
 
 func (m *Manager) Info() Info {
 	m.mu.RLock()
-	defer m.mu.RUnlock()
-	return m.info
+	info := m.info
+	trial := m.trial
+	m.mu.RUnlock()
+	if trial <= 0 {
+		trial = trialPhones
+	}
+	now := time.Now
+	if m.now != nil {
+		now = m.now
+	}
+	if !info.Activated {
+		info.Status = "trial"
+		info.MaxPhones = trial
+		info.EffectiveMaxPhones = trial
+		info.Expired = false
+		info.DaysLeft = 0
+		return info
+	}
+	if info.ExpiresAt != "" {
+		if exp, err := time.Parse(time.RFC3339, info.ExpiresAt); err != nil {
+			info.Status = "expired"
+			info.Expired = true
+			info.EffectiveMaxPhones = trial
+			return info
+		} else {
+			remaining := exp.Sub(now())
+			if remaining <= 0 {
+				info.Status = "expired"
+				info.Expired = true
+				info.EffectiveMaxPhones = trial
+				info.DaysLeft = 0
+				return info
+			}
+			info.DaysLeft = int(math.Ceil(remaining.Hours() / 24))
+		}
+	}
+	info.Status = "licensed"
+	info.Expired = false
+	info.EffectiveMaxPhones = info.MaxPhones
+	return info
 }
 
 func (m *Manager) MaxPhones() int {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	if m.info.MaxPhones <= 0 {
+	info := m.Info()
+	if info.EffectiveMaxPhones <= 0 {
 		return 0
 	}
-	return m.info.MaxPhones
+	return info.EffectiveMaxPhones
 }
 
 func (m *Manager) Activate(code string) (Info, error) {
@@ -82,13 +127,22 @@ func (m *Manager) Activate(code string) (Info, error) {
 	if info.MaxPhones <= 0 || info.MaxPhones > 100000 {
 		return m.Info(), errors.New("授权话机数量无效")
 	}
+	if info.ExpiresAt != "" {
+		exp, err := time.Parse(time.RFC3339, info.ExpiresAt)
+		if err != nil {
+			return m.Info(), errors.New("激活码到期时间格式错误")
+		}
+		if !exp.After(time.Now()) {
+			return m.Info(), errors.New("激活码已过期")
+		}
+	}
 	info.Status = "licensed"
 	info.Activated = true
 	info.ActivatedAt = time.Now().Format(time.RFC3339)
 	m.mu.Lock()
 	m.info = info
 	m.mu.Unlock()
-	return info, nil
+	return m.Info(), nil
 }
 
 func (m *Manager) SetInfo(info Info) {
@@ -129,7 +183,7 @@ func Decode(code string, pub ed25519.PublicKey) (Info, error) {
 	}
 	return Info{
 		LicenseID: p.LicenseID, Customer: p.Customer, MaxPhones: p.MaxPhones,
-		IssuedAt: p.IssuedAt,
+		IssuedAt: p.IssuedAt, ExpiresAt: p.ExpiresAt,
 	}, nil
 }
 
