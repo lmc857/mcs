@@ -271,3 +271,28 @@ func TestConferenceRoomCRUD(t *testing.T) {
 		t.Fatal("deleted room found")
 	}
 }
+
+func TestConferencePCMBufferPtime(t *testing.T) {
+	p := &conferenceParticipant{}
+	// Two 30 ms G.711 packets contain 480 samples = exactly three 20 ms
+	// frames. They must not be truncated to two frames.
+	for i := 0; i < 2; i++ {
+		samples := make([]int16, 240)
+		for j := range samples {
+			samples[j] = int16(i*100 + j)
+		}
+		p.enqueuePCM(samples)
+	}
+	if f := p.takeFrame(); len(f) != conferenceFrameSamples {
+		t.Fatalf("frame 1 = %d", len(f))
+	}
+	if f := p.takeFrame(); len(f) != conferenceFrameSamples {
+		t.Fatalf("frame 2 = %d", len(f))
+	}
+	if f := p.takeFrame(); len(f) != conferenceFrameSamples {
+		t.Fatalf("frame 3 = %d", len(f))
+	}
+	if f := p.takeFrame(); f != nil {
+		t.Fatalf("unexpected extra frame: %d", len(f))
+	}
+}

@@ -53,7 +53,7 @@ func (s *Server) HandleConferenceWebRTC(ctx context.Context, roomNumber, usernam
 	}
 	p := &conferenceParticipant{
 		id: id, ext: "web:" + username, name: username + "（网页）", codec: "PCMU", pt: 0,
-		server: s, in: make(chan []int16, 8), stopCh: make(chan struct{}), joinedAt: time.Now(),
+		server: s, stopCh: make(chan struct{}), joinedAt: time.Now(),
 		webrtcPC: pc, webrtcAudio: audioTrack, webrtcVideo: videoTrack, isWebRTC: true,
 		seq: uint16(time.Now().UnixNano()), ts: uint32(time.Now().UnixNano()), ssrc: uint32(time.Now().UnixNano()),
 	}
@@ -136,16 +136,11 @@ func (p *conferenceParticipant) pumpWebRTCAudio(track *webrtc.TrackRemote) {
 			return
 		}
 		raw := decodeG711(pkt.Payload, codec)
-		frame := make([]int16, conferenceFrameSamples)
-		for i := 0; i < conferenceFrameSamples && i*2+1 < len(raw); i++ {
-			frame[i] = int16(binary.LittleEndian.Uint16(raw[i*2 : i*2+2]))
+		samples := make([]int16, len(raw)/2)
+		for i := range samples {
+			samples[i] = int16(binary.LittleEndian.Uint16(raw[i*2 : i*2+2]))
 		}
-		p.mu.Lock()
-		select {
-		case p.in <- frame:
-		default:
-		}
-		p.mu.Unlock()
+		p.enqueuePCM(samples)
 		p.videoMu.Lock()
 		hasVideo := p.hasVideo
 		p.videoMu.Unlock()

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
+	"math"
 	"net"
 	"os"
 	"path/filepath"
@@ -78,10 +79,9 @@ type conferenceParticipant struct {
 	webrtcVideo *webrtc.TrackLocalStaticRTP
 	isWebRTC    bool
 
-	mu    sync.Mutex
-	in    chan []int16
-	last  []int16
-	muted bool
+	mu     sync.Mutex
+	pcmBuf []int16
+	muted  bool
 
 	seq  uint16
 	ts   uint32
@@ -440,21 +440,11 @@ func (r *conferenceRoom) mixLoop() {
 			}
 			frames := make([]frame, 0, len(parts))
 			for _, p := range parts {
+				pcm := p.takeFrame()
 				p.mu.Lock()
-				for {
-					select {
-					case f := <-p.in:
-						p.last = f
-					default:
-						goto drained
-					}
-				}
-			drained:
-				last := p.last
-				p.last = nil
 				muted := p.muted
 				p.mu.Unlock()
-				frames = append(frames, frame{p: p, pcm: last, muted: muted})
+				frames = append(frames, frame{p: p, pcm: pcm, muted: muted})
 			}
 			var all [conferenceFrameSamples]int32
 			for _, f := range frames {
@@ -466,22 +456,34 @@ func (r *conferenceRoom) mixLoop() {
 				}
 			}
 			for _, dst := range frames {
-				var mixed [conferenceFrameSamples]int16
+				var sum [conferenceFrameSamples]int32
+				active := 0
 				for _, src := range frames {
-					if src.p.id == dst.p.id || src.muted {
+					if src.p.id == dst.p.id || src.muted || len(src.pcm) == 0 {
 						continue
 					}
+					active++
 					for i := 0; i < conferenceFrameSamples; i++ {
-						if i < len(src.pcm) {
-							v := int32(mixed[i]) + int32(src.pcm[i])
-							if v > 32767 {
-								v = 32767
-							} else if v < -32768 {
-								v = -32768
-							}
-							mixed[i] = int16(v)
-						}
+						sum[i] += int32(src.pcm[i])
 					}
+				}
+				// Mixing many full-scale G.711 sources without headroom
+				// saturates and produces harsh, electric-sounding distortion.
+				// Keep single-speaker level unchanged, but scale multiple
+				// active speakers by 1/sqrt(N).
+				scale := 1.0
+				if active > 1 {
+					scale = 1 / math.Sqrt(float64(active))
+				}
+				var mixed [conferenceFrameSamples]int16
+				for i := 0; i < conferenceFrameSamples; i++ {
+					v := int32(float64(sum[i]) * scale)
+					if v > 32767 {
+						v = 32767
+					} else if v < -32768 {
+						v = -32768
+					}
+					mixed[i] = int16(v)
 				}
 				dst.p.sendPCM(mixed[:])
 			}
@@ -515,20 +517,15 @@ func (p *conferenceParticipant) readRTP() {
 			continue
 		}
 		raw := decodeG711(pkt.Payload, p.codec)
-		frame := make([]int16, conferenceFrameSamples)
-		for i := 0; i < conferenceFrameSamples && i*2+1 < len(raw); i++ {
-			frame[i] = int16(binary.LittleEndian.Uint16(raw[i*2 : i*2+2]))
+		samples := make([]int16, len(raw)/2)
+		for i := range samples {
+			samples[i] = int16(binary.LittleEndian.Uint16(raw[i*2 : i*2+2]))
 		}
 		p.remoteMu.Lock()
 		p.remote = addr
 		p.remoteMu.Unlock()
-		p.mu.Lock()
-		select {
-		case p.in <- frame:
-			p.server.log.Debug("conference RTP in", "ext", p.ext, "bytes", n, "pt", pkt.PayloadType)
-		default:
-		}
-		p.mu.Unlock()
+		p.enqueuePCM(samples)
+		p.server.log.Debug("conference RTP in", "ext", p.ext, "bytes", n, "pt", pkt.PayloadType)
 		p.videoMu.Lock()
 		hasVideo := p.hasVideo
 		p.videoMu.Unlock()
@@ -536,6 +533,40 @@ func (p *conferenceParticipant) readRTP() {
 			p.room.selectVideo(p)
 		}
 	}
+}
+
+// takeFrame returns exactly one 20 ms frame. Keeping the remainder in the
+// buffer preserves the participant's ptime; draining to the newest packet
+// would silently speed up 30/40 ms senders.
+func (p *conferenceParticipant) takeFrame() []int16 {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if len(p.pcmBuf) < conferenceFrameSamples {
+		return nil
+	}
+	frame := make([]int16, conferenceFrameSamples)
+	copy(frame, p.pcmBuf[:conferenceFrameSamples])
+	p.pcmBuf = p.pcmBuf[conferenceFrameSamples:]
+	return frame
+}
+
+func (p *conferenceParticipant) enqueuePCM(samples []int16) {
+	if len(samples) == 0 {
+		return
+	}
+	p.mu.Lock()
+	p.pcmBuf = append(p.pcmBuf, samples...)
+	// Bound end-to-end latency to roughly 200 ms. Drop whole 20 ms frames
+	// from the oldest audio rather than truncating a packet in the middle.
+	maxSamples := conferenceFrameSamples * 10
+	if len(p.pcmBuf) > maxSamples {
+		drop := len(p.pcmBuf) - maxSamples
+		drop -= drop % conferenceFrameSamples
+		if drop > 0 {
+			p.pcmBuf = p.pcmBuf[drop:]
+		}
+	}
+	p.mu.Unlock()
 }
 
 func (p *conferenceParticipant) sendPCM(samples []int16) {
@@ -791,7 +822,7 @@ func (s *Server) handleConferenceInvite(req *sip.Request, tx sip.ServerTransacti
 		id: callID, ext: from, name: name, codec: codec, pt: pt, conn: conn, dss: dss, server: s,
 		remote:    conferenceRemote(offer, req.Source()),
 		videoConn: videoConn, videoRemote: conferenceVideoRemote(offer, req.Source()), videoPT: videoPT,
-		in: make(chan []int16, 8), stopCh: make(chan struct{}), joinedAt: time.Now(),
+		stopCh: make(chan struct{}), joinedAt: time.Now(),
 		seq: uint16(time.Now().UnixNano()), ts: uint32(time.Now().UnixNano()), ssrc: uint32(time.Now().UnixNano()),
 	}
 	if !room.add(p) {
