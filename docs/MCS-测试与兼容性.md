@@ -1,6 +1,6 @@
 # MCS 测试与兼容性
 
-> 当前代码 `0.1.0-dev`。本文记录自动化测试覆盖、已验证环境与已知兼容边界，不是第三方认证报告。
+> 当前代码 `0.11.0`。本文记录自动化测试覆盖、已验证环境与已知兼容边界，不是第三方认证报告。
 
 ## 1. 自动化测试
 
@@ -22,6 +22,9 @@ go test -race ./internal/sipserver ./internal/api ./internal/store ./internal/tt
 | `paging_test.go` | 话机拨分区号实时寻呼、RTP 转发、挂机停止 |
 | `video_test.go` | H.264 双向中继、WebRTC 音视频接收、浏览器麦克风回传 |
 | `srtp_test.go` | SDES SDP 解析/改写、双向 SRTP、SRTCP 转发 |
+| `srtp_policy_test.go` | `auto/required/off` SRTP 策略 |
+| `tls_transport_test.go` | Contact/REGISTER transport 保留，B 腿 Request 使用 TLS |
+| `tls_outbound_test.go` | MCS 出站 B 腿真实 TLS INVITE/200 |
 | `sdp_test.go` | 音视频 SDP 端口/连接地址改写 |
 | `schedule_test.go` | cron 解析、到期推进、JSON 持久化 |
 | `real_tts_test.go` | `MCS_REAL_TTS=1` 时调用真实 Kokoro |
@@ -35,7 +38,8 @@ go test -race ./internal/sipserver ./internal/api ./internal/store ./internal/tt
 - SIP 测试 UAC/UAS 基于 sipgo，运行在 127.0.0.1 不同端口；
 - WebRTC 测试客户端基于 Pion，与本机 MCS 建立 ICE/DTLS；
 - 真实 Kokoro-82M（`http://127.0.0.1:8399`）中文 TTS 已验证；
-- SQLite、SRTP、TLS/HTTPS 均为本机冒烟测试。
+- SQLite、SRTP、TLS/HTTPS 均为本机冒烟测试；
+- SIP TLS 入站、HTTPS、出站 B 腿 TLS、SRTP 策略已做自动化/本机冒烟验证。
 
 **未验证**：真实报警柱/门口机/SIP 音箱、真实组播网络、Windows 主机、Linux 主机 systemd 实机、跨公网 NAT。
 
@@ -58,9 +62,11 @@ go test -race ./internal/sipserver ./internal/api ./internal/store ./internal/tt
 
 - G.722/G.729/Opus SIP 终端：不转码；WebRTC 侧优先 PCMU/PCMA。
 - SIP 终端 DTLS-SRTP：未实现；仅 SDES-SRTP。
+- mTLS/客户端证书：未实现。
+- 广播/寻呼/会议 SRTP：未实现，仍为明文 RTP。
 - 组播：代码支持，但未在真实交换机/音箱上验证。
 - 固定 RTP 端口段：未实现，RTP 使用动态端口；云安全组需放行 UDP 高位端口。
-- Windows 安装：计划任务启动，非原生 SCM 服务。
+- Windows 安装：原生 SCM 服务已支持；真实 Windows 主机仍需现场验证。
 - 浏览器视频回传/TURN/视频录像：未实现。
 - 单管理员、无 RBAC/登录失败锁定/操作审计。
 

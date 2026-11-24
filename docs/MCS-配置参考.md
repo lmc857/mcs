@@ -10,10 +10,15 @@
 | `sip_tls` | 空 | 可选 SIP over TLS 监听，如 `0.0.0.0:5061` |
 | `tls_cert` | 空 | SIP TLS 证书 PEM；`sip_tls` 非空时必填 |
 | `tls_key` | 空 | SIP TLS 私钥 PEM |
+| `tls_ca` | 空 | 可选，信任的终端 CA PEM；用于 MCS 出站 TLS 校验 |
+| `tls_insecure` | `false` | 仅内网测试：跳过终端 SIP TLS 证书校验 |
+| `srtp_mode` | `auto` | `auto` / `required` / `off`；required 仅作用于点对点/报警呼叫 |
 | `http` | `127.0.0.1:8080` | 控制台 HTTP |
 | `https` | 空 | 可选控制台 HTTPS，如 `0.0.0.0:8443` |
 | `https_cert` | 空 | 控制台证书；空则复用 `tls_cert` |
 | `https_key` | 空 | 控制台私钥；空则复用 `tls_key` |
+
+以上 TLS/HTTPS/SRTP 字段均可在网页“系统设置”中修改，保存后重启生效。
 | `domain` | `mcs.local` | SIP 域/Realm 展示 |
 | `advertise` | `127.0.0.1:5060` | 写进 Contact/SDP 的设备可达地址；真机必须改成服务器 LAN IP |
 
