@@ -83,6 +83,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/registrations", s.listDevices)
 	mux.HandleFunc("GET /api/v1/calls/active", s.activeCalls)
 	mux.HandleFunc("GET /api/v1/conference", s.conferenceList)
+	mux.HandleFunc("GET /api/v1/conference/audio", s.conferenceAudioGet)
+	mux.HandleFunc("PUT /api/v1/conference/audio", s.conferenceAudioSave)
 	mux.HandleFunc("POST /api/v1/conference/rooms", s.conferenceRoomCreate)
 	mux.HandleFunc("PATCH /api/v1/conference/rooms/{number}", s.conferenceRoomUpdate)
 	mux.HandleFunc("DELETE /api/v1/conference/rooms/{number}", s.conferenceRoomDelete)
@@ -772,6 +774,33 @@ func (s *Server) conferenceList(w http.ResponseWriter, r *http.Request) {
 		rooms = []sipserver.ConferenceRoomView{}
 	}
 	writeJSON(w, 200, map[string]any{"items": rooms, "total": len(rooms)})
+}
+
+func (s *Server) conferenceAudioGet(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, 200, s.sip.ConferenceAudio())
+}
+
+func (s *Server) conferenceAudioSave(w http.ResponseWriter, r *http.Request) {
+	var req config.ConferenceAudioConfig
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, 400, map[string]any{"code": "VALIDATION_FAILED", "message": "invalid json"})
+		return
+	}
+	req = config.NormalizeConferenceAudio(req)
+	if err := config.ValidateConferenceAudio(req); err != nil {
+		writeJSON(w, 400, map[string]any{"code": "VALIDATION_FAILED", "message": err.Error()})
+		return
+	}
+	if err := s.sip.SetConferenceAudio(req); err != nil {
+		writeJSON(w, 400, map[string]any{"code": "VALIDATION_FAILED", "message": err.Error()})
+		return
+	}
+	if s.db != nil {
+		if raw, err := json.Marshal(req); err == nil {
+			_ = s.db.SetSetting("conference_audio", string(raw))
+		}
+	}
+	writeJSON(w, 200, req)
 }
 
 func (s *Server) conferenceRoomCreate(w http.ResponseWriter, r *http.Request) {

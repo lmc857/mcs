@@ -50,7 +50,7 @@ body { margin:0; color:var(--ink); font-family:"PingFang SC","Microsoft YaHei","
   <div class="kicker">报警 · 对讲 · 广播融合通信服务器</div>
   <h1>MCS 用户<br>使用手册</h1>
   <div class="rule"></div>
-  <div class="meta">适用版本：MCS 0.8.0<br>文档版本：2026-11-23<br>适用对象：值班人员、操作员、系统管理员</div>
+  <div class="meta">适用版本：MCS 0.8.3<br>文档版本：2026-11-23<br>适用对象：值班人员、操作员、系统管理员</div>
   <div class="foot">覆盖设备、报警、对讲、广播、寻呼、会议、系统设置与运维。<br>请结合实际网络、分区和设备配置使用。</div>
 </section>
 <nav class="toc">
@@ -703,7 +703,49 @@ MCS 按报警级别依次呼叫值班目标
 <li>不包含视频；</li>
 <li>房间启用录音后生效。</li>
 </ul>
-<h3>9.5 会议限制</h3>
+<h3>9.5 会议音频处理</h3>
+<p>管理员在“会议”页面下方可以调整会议音频处理，保存后立即生效，不需要重启。</p>
+<p><img src="images/console-conference-audio.png" alt="会议音频处理"></p>
+<table>
+<thead>
+<tr>
+<th>选项</th>
+<th>作用</th>
+<th>建议</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>高通滤波</td>
+<td>去除低频轰鸣、空调低频噪声</td>
+<td>建议开启</td>
+</tr>
+<tr>
+<td>噪声门</td>
+<td>压低持续的环境底噪</td>
+<td>从阈值 400 开始，过高会吃字</td>
+</tr>
+<tr>
+<td>自动增益</td>
+<td>自动调整参会者音量</td>
+<td>现场需要时开启，会放大底噪</td>
+</tr>
+<tr>
+<td>限幅器</td>
+<td>防止多人混音削波、电音</td>
+<td>建议开启</td>
+</tr>
+</tbody></table>
+<p>可调参数：</p>
+<ul>
+<li>噪声门阈值：50-4000，默认 400；</li>
+<li>AGC 目标电平：500-12000，默认 2200；</li>
+<li>AGC 最大增益：1-16，默认 4。</li>
+</ul>
+<p>建议先用“高通 + 限幅”，再根据现场决定是否开启噪声门和 AGC。</p>
+<blockquote>
+<p>服务器不做 AEC。回声消除由 SIP 会议麦克风/话机自身或 WebRTC 浏览器完成；网页加入会议时，浏览器会请求 AEC、噪声抑制和自动增益。</p>
+</blockquote>
+<h3>9.6 会议限制</h3>
 <ul>
 <li>默认 8 方，最大 16；</li>
 <li>没有会议 PIN；</li>

@@ -42,6 +42,8 @@ type Server struct {
 	hbFailures      map[string]int
 	broadcastCfg    config.BroadcastConfig
 	pagingCfg       config.PagingConfig
+	audioMu         sync.RWMutex
+	conferenceAudio config.ConferenceAudioConfig
 	mediaTranscode  bool
 	zones           []zone
 	ttsMu           sync.RWMutex
@@ -107,6 +109,7 @@ func New(st *store.Store, auth *Authenticator, cdr *store.CDRStore, alarms *stor
 		hbFailures:      map[string]int{},
 		broadcastCfg:    opts.Broadcast,
 		pagingCfg:       pagingCfg,
+		conferenceAudio: config.NormalizeConferenceAudio(opts.Conference.Audio),
 		mediaTranscode:  opts.Media.Transcode,
 		zones:           buildZones(opts.Zones, st),
 		ttsCfg:          opts.TTS,
@@ -357,4 +360,21 @@ func headerValue(req *sip.Request, name string) string {
 		return strings.TrimSpace(h.Value())
 	}
 	return ""
+}
+
+func (s *Server) ConferenceAudio() config.ConferenceAudioConfig {
+	s.audioMu.RLock()
+	defer s.audioMu.RUnlock()
+	return s.conferenceAudio
+}
+
+func (s *Server) SetConferenceAudio(c config.ConferenceAudioConfig) error {
+	c = config.NormalizeConferenceAudio(c)
+	if err := config.ValidateConferenceAudio(c); err != nil {
+		return err
+	}
+	s.audioMu.Lock()
+	s.conferenceAudio = c
+	s.audioMu.Unlock()
+	return nil
 }

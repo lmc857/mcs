@@ -53,7 +53,7 @@ func (s *Server) HandleConferenceWebRTC(ctx context.Context, roomNumber, usernam
 	}
 	p := &conferenceParticipant{
 		id: id, ext: "web:" + username, name: username + "（网页）", codec: "PCMU", pt: 0,
-		server: s, stopCh: make(chan struct{}), joinedAt: time.Now(),
+		server: s, audioProc: newConferenceAudioState(), stopCh: make(chan struct{}), joinedAt: time.Now(),
 		webrtcPC: pc, webrtcAudio: audioTrack, webrtcVideo: videoTrack, isWebRTC: true,
 		seq: uint16(time.Now().UnixNano()), ts: uint32(time.Now().UnixNano()), ssrc: uint32(time.Now().UnixNano()),
 	}

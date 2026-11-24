@@ -74,7 +74,18 @@ type AlarmLevel struct {
 
 type ConferenceConfig struct {
 	Enabled bool                   `yaml:"enabled"`
+	Audio   ConferenceAudioConfig  `yaml:"audio"`
 	Rooms   []ConferenceRoomConfig `yaml:"rooms"`
+}
+
+type ConferenceAudioConfig struct {
+	Highpass           bool    `yaml:"highpass" json:"highpass"`
+	NoiseGate          bool    `yaml:"noise_gate" json:"noise_gate"`
+	NoiseGateThreshold int     `yaml:"noise_gate_threshold" json:"noise_gate_threshold"`
+	AGC                bool    `yaml:"agc" json:"agc"`
+	AGCTargetRMS       int     `yaml:"agc_target_rms" json:"agc_target_rms"`
+	AGCMaxGain         float64 `yaml:"agc_max_gain" json:"agc_max_gain"`
+	Limiter            bool    `yaml:"limiter" json:"limiter"`
 }
 
 type ConferenceRoomConfig struct {
@@ -149,6 +160,9 @@ func defaults() Config {
 			MaxConcurrency: 16,
 		},
 		Paging: PagingConfig{Enabled: true},
+		Conference: ConferenceConfig{Audio: ConferenceAudioConfig{
+			Highpass: true, NoiseGateThreshold: 400, AGCTargetRMS: 2200, AGCMaxGain: 4, Limiter: true,
+		}},
 		TTS: TTSConfig{
 			Provider: "openai",
 			BaseURL:  "http://127.0.0.1:8399",
@@ -225,6 +239,7 @@ func Load(path string) (Config, error) {
 	if cfg.Auth.Realm == "" {
 		cfg.Auth.Realm = "mcs"
 	}
+	cfg.Conference.Audio = NormalizeConferenceAudio(cfg.Conference.Audio)
 	roomNumbers := map[string]bool{}
 	for i := range cfg.Conference.Rooms {
 		r := &cfg.Conference.Rooms[i]
@@ -326,4 +341,45 @@ func Load(path string) (Config, error) {
 		}
 	}
 	return cfg, nil
+}
+
+func NormalizeConferenceAudio(c ConferenceAudioConfig) ConferenceAudioConfig {
+	if c.NoiseGateThreshold <= 0 {
+		c.NoiseGateThreshold = 400
+	}
+	if c.NoiseGateThreshold < 50 {
+		c.NoiseGateThreshold = 50
+	}
+	if c.NoiseGateThreshold > 4000 {
+		c.NoiseGateThreshold = 4000
+	}
+	if c.AGCTargetRMS <= 0 {
+		c.AGCTargetRMS = 2200
+	}
+	if c.AGCTargetRMS < 500 {
+		c.AGCTargetRMS = 500
+	}
+	if c.AGCTargetRMS > 12000 {
+		c.AGCTargetRMS = 12000
+	}
+	if c.AGCMaxGain < 1 {
+		c.AGCMaxGain = 1
+	}
+	if c.AGCMaxGain > 16 {
+		c.AGCMaxGain = 16
+	}
+	return c
+}
+
+func ValidateConferenceAudio(c ConferenceAudioConfig) error {
+	if c.NoiseGateThreshold < 50 || c.NoiseGateThreshold > 4000 {
+		return fmt.Errorf("noise_gate_threshold must be 50-4000")
+	}
+	if c.AGCTargetRMS < 500 || c.AGCTargetRMS > 12000 {
+		return fmt.Errorf("agc_target_rms must be 500-12000")
+	}
+	if c.AGCMaxGain < 1 || c.AGCMaxGain > 16 {
+		return fmt.Errorf("agc_max_gain must be 1-16")
+	}
+	return nil
 }

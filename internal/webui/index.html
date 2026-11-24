@@ -543,6 +543,23 @@ textarea.bc-text{margin:0 17px 12px;width:calc(100% - 34px)}
           </div>
           <div id="conference-rooms" class="panel-body" style="padding:0 17px 16px"><div class="empty">加载中…</div></div>
         </div>
+        <div class="panel" data-admin-only>
+          <div class="panel-head"><h2>会议音频处理</h2><span class="hint">保存后立即生效，不需要重启</span></div>
+          <div class="form">
+            <label class="hint"><input type="checkbox" id="conf-audio-hp"> 高通滤波</label>
+            <label class="hint"><input type="checkbox" id="conf-audio-gate"> 噪声门</label>
+            <label class="hint"><input type="checkbox" id="conf-audio-agc"> 自动增益</label>
+            <label class="hint"><input type="checkbox" id="conf-audio-limiter"> 限幅器</label>
+          </div>
+          <div class="form">
+            <label class="field">噪声门阈值<input type="number" id="conf-audio-gate-threshold" min="50" max="4000"></label>
+            <label class="field">AGC 目标电平<input type="number" id="conf-audio-target" min="500" max="12000"></label>
+            <label class="field">AGC 最大增益<input type="number" id="conf-audio-maxgain" min="1" max="16" step="0.1"></label>
+            <button class="btn btn-primary" onclick="saveConferenceAudio()">保存音频设置</button>
+            <span class="hint" id="conf-audio-msg"></span>
+          </div>
+          <div class="form-note">推荐先用高通 + 限幅；噪声门阈值过高会吃字，AGC 会放大底噪。AEC 仍由终端/浏览器处理。</div>
+        </div>
       </section>
 
       <section id="tab-logs" class="tab-panel">
@@ -716,9 +733,14 @@ async function joinConferenceWebRTC(room){
   if(confPC){ alert('已经在会议中，请先关闭当前网页会议'); return; }
   let stream;
   try{
-    stream = await navigator.mediaDevices.getUserMedia({audio:true, video:true});
+    stream = await navigator.mediaDevices.getUserMedia({
+      audio: {echoCancellation:true, noiseSuppression:true, autoGainControl:true},
+      video:true
+    });
   }catch(e){
-    try{ stream = await navigator.mediaDevices.getUserMedia({audio:true}); }
+    try{ stream = await navigator.mediaDevices.getUserMedia({
+      audio: {echoCancellation:true, noiseSuppression:true, autoGainControl:true}
+    }); }
     catch(e2){ alert('无法打开麦克风/摄像头：' + e2.message); return; }
   }
   confLocalStream = stream;
@@ -766,6 +788,39 @@ function leaveConferenceWebRTC(){
   if(audio) audio.srcObject = null;
   if($('conf-webrtc-modal')) $('conf-webrtc-modal').hidden = true;
   refresh();
+}
+
+async function loadConferenceAudio(){
+  if(currentRole !== 'admin') return;
+  try{
+    const d = await getJSON('/api/v1/conference/audio');
+    $('conf-audio-hp').checked = !!d.highpass;
+    $('conf-audio-gate').checked = !!d.noise_gate;
+    $('conf-audio-agc').checked = !!d.agc;
+    $('conf-audio-limiter').checked = !!d.limiter;
+    $('conf-audio-gate-threshold').value = d.noise_gate_threshold || 400;
+    $('conf-audio-target').value = d.agc_target_rms || 2200;
+    $('conf-audio-maxgain').value = d.agc_max_gain || 4;
+  }catch(e){}
+}
+
+async function saveConferenceAudio(){
+  const body = {
+    highpass: $('conf-audio-hp').checked,
+    noise_gate: $('conf-audio-gate').checked,
+    noise_gate_threshold: Number($('conf-audio-gate-threshold').value) || 400,
+    agc: $('conf-audio-agc').checked,
+    agc_target_rms: Number($('conf-audio-target').value) || 2200,
+    agc_max_gain: Number($('conf-audio-maxgain').value) || 4,
+    limiter: $('conf-audio-limiter').checked
+  };
+  try{
+    const res = await fetch('/api/v1/conference/audio', {method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+    const d = await res.json().catch(() => ({}));
+    if(!res.ok) throw new Error(d.message || ('HTTP ' + res.status));
+    $('conf-audio-msg').textContent = '已保存，立即生效';
+    loadConferenceAudio();
+  }catch(e){ $('conf-audio-msg').textContent = '保存失败：' + e.message; }
 }
 
 async function addConferenceRoom(){
@@ -1380,6 +1435,7 @@ function startApp(){
   appStarted = true;
   loadZones();
   loadPagingInfo();
+  loadConferenceAudio();
   loadMedia();
   loadSchedules();
   loadServerSettings();

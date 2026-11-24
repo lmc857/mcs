@@ -79,9 +79,10 @@ type conferenceParticipant struct {
 	webrtcVideo *webrtc.TrackLocalStaticRTP
 	isWebRTC    bool
 
-	mu     sync.Mutex
-	pcmBuf []int16
-	muted  bool
+	mu        sync.Mutex
+	pcmBuf    []int16
+	muted     bool
+	audioProc conferenceAudioState
 
 	seq  uint16
 	ts   uint32
@@ -455,6 +456,7 @@ func (r *conferenceRoom) mixLoop() {
 					all[i] += int32(f.pcm[i])
 				}
 			}
+			cfg := r.server.ConferenceAudio()
 			for _, dst := range frames {
 				var sum [conferenceFrameSamples]int32
 				active := 0
@@ -478,12 +480,11 @@ func (r *conferenceRoom) mixLoop() {
 				var mixed [conferenceFrameSamples]int16
 				for i := 0; i < conferenceFrameSamples; i++ {
 					v := int32(float64(sum[i]) * scale)
-					if v > 32767 {
-						v = 32767
-					} else if v < -32768 {
-						v = -32768
+					if cfg.Limiter {
+						mixed[i] = limitSample(v)
+					} else {
+						mixed[i] = int16(clamp16(v))
 					}
-					mixed[i] = int16(v)
 				}
 				dst.p.sendPCM(mixed[:])
 			}
@@ -554,7 +555,9 @@ func (p *conferenceParticipant) enqueuePCM(samples []int16) {
 	if len(samples) == 0 {
 		return
 	}
+	cfg := p.server.ConferenceAudio()
 	p.mu.Lock()
+	p.processPCM(samples, cfg)
 	p.pcmBuf = append(p.pcmBuf, samples...)
 	// Bound end-to-end latency to roughly 200 ms. Drop whole 20 ms frames
 	// from the oldest audio rather than truncating a packet in the middle.
@@ -822,7 +825,7 @@ func (s *Server) handleConferenceInvite(req *sip.Request, tx sip.ServerTransacti
 		id: callID, ext: from, name: name, codec: codec, pt: pt, conn: conn, dss: dss, server: s,
 		remote:    conferenceRemote(offer, req.Source()),
 		videoConn: videoConn, videoRemote: conferenceVideoRemote(offer, req.Source()), videoPT: videoPT,
-		stopCh: make(chan struct{}), joinedAt: time.Now(),
+		audioProc: newConferenceAudioState(), stopCh: make(chan struct{}), joinedAt: time.Now(),
 		seq: uint16(time.Now().UnixNano()), ts: uint32(time.Now().UnixNano()), ssrc: uint32(time.Now().UnixNano()),
 	}
 	if !room.add(p) {

@@ -41,6 +41,15 @@ conference:
   # 电话会议：房间可在网页“会议”页创建（保存到 SQLite），不一定要写这里。
   # enabled/rooms 仅用于首次启动导入初始房间。
   enabled: false
+  # 会议音频处理；网页“会议 → 会议音频处理”也可修改并立即生效。
+  audio:
+    highpass: true
+    noise_gate: false
+    noise_gate_threshold: 400
+    agc: false
+    agc_target_rms: 2200
+    agc_max_gain: 4.0
+    limiter: true
   rooms:
     - number: "7000"
       name: "会议室"

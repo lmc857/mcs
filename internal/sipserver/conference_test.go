@@ -273,7 +273,7 @@ func TestConferenceRoomCRUD(t *testing.T) {
 }
 
 func TestConferencePCMBufferPtime(t *testing.T) {
-	p := &conferenceParticipant{}
+	p := &conferenceParticipant{server: &Server{conferenceAudio: config.NormalizeConferenceAudio(config.ConferenceAudioConfig{})}}
 	// Two 30 ms G.711 packets contain 480 samples = exactly three 20 ms
 	// frames. They must not be truncated to two frames.
 	for i := 0; i < 2; i++ {

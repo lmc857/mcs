@@ -171,6 +171,17 @@ func runServer(parent context.Context, configPath, logPath string) error {
 			logger.Info("server settings loaded from db", "advertise", saved.Advertise, "http", saved.HTTP, "sip_udp", saved.SIPUDP)
 		}
 	}
+	if raw, ok := db.GetSetting("conference_audio"); ok {
+		var saved config.ConferenceAudioConfig
+		if err := json.Unmarshal([]byte(raw), &saved); err == nil {
+			saved = config.NormalizeConferenceAudio(saved)
+			if err := config.ValidateConferenceAudio(saved); err == nil {
+				cfg.Conference.Audio = saved
+			} else {
+				logger.Warn("ignore invalid conference audio settings", "error", err)
+			}
+		}
+	}
 	st := store.NewWithDB(cfg.Devices, db)
 	cdr := store.NewCDRStoreDB(2000, db)
 	alarms := store.NewAlarmStoreDB(1000, db)
