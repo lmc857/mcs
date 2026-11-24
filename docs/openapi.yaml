@@ -117,6 +117,20 @@ paths:
       responses:
         '200': {description: OK}
 
+  /api/v1/license:
+    get:
+      tags: [license]
+      summary: 授权状态
+      responses:
+        '200': {description: OK}
+  /api/v1/license/activate:
+    post:
+      tags: [license]
+      summary: 激活授权
+      responses:
+        '200': {description: OK}
+        '400': {description: 激活码无效}
+
   /api/v1/paging:
     get:
       tags: [paging]

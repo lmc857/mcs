@@ -131,6 +131,25 @@
 
 失败 `502 TTS_FAILED`。
 
+## 2.4.1 授权
+
+### GET `/api/v1/license`
+
+```json
+{"license_id":"MCS-2026-001","customer":"客户","max_phones":50,
+ "status":"licensed","activated":true,"used_phones":12,"online_phones":8}
+```
+
+仅 admin。
+
+### POST `/api/v1/license/activate`
+
+```json
+{"code":"eyJ2IjoxLC..."}
+```
+
+仅 admin；激活码错误返回 400。
+
 ## 2.5 实时寻呼
 
 ### GET `/api/v1/paging`

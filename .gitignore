@@ -18,3 +18,5 @@ initial-admin.txt
 .dsh-plugins/
 idea-queue/
 idea-queue-dev/
+
+.license/

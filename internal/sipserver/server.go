@@ -15,6 +15,7 @@ import (
 	"github.com/emiago/sipgo/sip"
 
 	"mcs/internal/config"
+	"mcs/internal/license"
 	"mcs/internal/store"
 	"mcs/internal/tts"
 )
@@ -42,6 +43,7 @@ type Server struct {
 	hbFailures      map[string]int
 	broadcastCfg    config.BroadcastConfig
 	pagingCfg       config.PagingConfig
+	license         *license.Manager
 	audioMu         sync.RWMutex
 	conferenceAudio config.ConferenceAudioConfig
 	mediaTranscode  bool
@@ -69,6 +71,7 @@ type Options struct {
 	Broadcast    config.BroadcastConfig
 	Paging       config.PagingConfig
 	Conference   config.ConferenceConfig
+	License      *license.Manager
 	Media        config.MediaConfig
 	TTS          config.TTSConfig
 	Zones        []config.ZoneConfig
@@ -109,6 +112,7 @@ func New(st *store.Store, auth *Authenticator, cdr *store.CDRStore, alarms *stor
 		hbFailures:      map[string]int{},
 		broadcastCfg:    opts.Broadcast,
 		pagingCfg:       pagingCfg,
+		license:         opts.License,
 		conferenceAudio: config.NormalizeConferenceAudio(opts.Conference.Audio),
 		mediaTranscode:  opts.Media.Transcode,
 		zones:           buildZones(opts.Zones, st),
@@ -261,6 +265,17 @@ func (s *Server) onRegister(req *sip.Request, tx sip.ServerTransaction) {
 		return
 	}
 
+	if s.license != nil && s.license.MaxPhones() > 0 {
+		view, known := s.store.Get(ext)
+		if !known || !view.Online {
+			_, online := s.store.Count()
+			if online >= s.license.MaxPhones() {
+				s.log.Warn("register license limit", "ext", ext, "online", online, "max_phones", s.license.MaxPhones())
+				s.respond(req, tx, 403, "Forbidden")
+				return
+			}
+		}
+	}
 	contact := ""
 	if ch := req.GetHeader("Contact"); ch != nil {
 		contact = ch.Value()

@@ -22,6 +22,7 @@ import (
 	"mcs/internal/api"
 	"mcs/internal/auth"
 	"mcs/internal/config"
+	"mcs/internal/license"
 	"mcs/internal/logbus"
 	"mcs/internal/sipserver"
 	"mcs/internal/store"
@@ -182,13 +183,21 @@ func runServer(parent context.Context, configPath, logPath string) error {
 			}
 		}
 	}
+	lic := license.New(license.DefaultPublicKey(), 4)
+	if raw, ok := db.GetSetting("license_code"); ok {
+		if info, err := lic.Activate(raw); err != nil {
+			logger.Warn("ignore invalid license code", "error", err)
+		} else {
+			logger.Info("license loaded", "customer", info.Customer, "max_phones", info.MaxPhones)
+		}
+	}
 	st := store.NewWithDB(cfg.Devices, db)
 	cdr := store.NewCDRStoreDB(2000, db)
 	alarms := store.NewAlarmStoreDB(1000, db)
 	auth := sipserver.NewAuthenticator(cfg.Auth.Realm, secret)
 	sipSrv, err := sipserver.New(st, auth, cdr, alarms, sipserver.Options{
 		Domain: cfg.Server.Domain, Advertise: cfg.Server.Advertise, DataDir: cfg.Storage.DataDir,
-		Alarm: cfg.Alarm, Registration: cfg.Registration, Broadcast: cfg.Broadcast, Paging: cfg.Paging, Conference: cfg.Conference, Media: cfg.Media, TTS: ttsCfg, Zones: cfg.Zones,
+		Alarm: cfg.Alarm, Registration: cfg.Registration, Broadcast: cfg.Broadcast, Paging: cfg.Paging, Conference: cfg.Conference, Media: cfg.Media, TTS: ttsCfg, Zones: cfg.Zones, License: lic,
 	}, logger)
 	if err != nil {
 		return fmt.Errorf("init sip server: %w", err)
@@ -202,7 +211,7 @@ func runServer(parent context.Context, configPath, logPath string) error {
 	if cfg.Auth.ConsolePassword != "" {
 		apiOpts = append(apiOpts, api.WithConsoleAuth(consoleUser, cfg.Auth.ConsolePassword))
 	}
-	apiOpts = append(apiOpts, api.WithDB(db), api.WithLogHub(logHub), api.WithServerSettings(cfg.ServerSettings()))
+	apiOpts = append(apiOpts, api.WithDB(db), api.WithLogHub(logHub), api.WithServerSettings(cfg.ServerSettings()), api.WithLicense(lic))
 	handler := api.New(st, cdr, alarms, sipSrv, cfg.Storage.DataDir, version, apiOpts...).Handler()
 	httpSrv := &http.Server{
 		Addr:              cfg.Server.HTTP,

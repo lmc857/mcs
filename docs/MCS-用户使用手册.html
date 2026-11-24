@@ -50,7 +50,7 @@ body { margin:0; color:var(--ink); font-family:"PingFang SC","Microsoft YaHei","
   <div class="kicker">报警 · 对讲 · 广播融合通信服务器</div>
   <h1>MCS 用户<br>使用手册</h1>
   <div class="rule"></div>
-  <div class="meta">适用版本：MCS 0.8.3<br>文档版本：2026-11-23<br>适用对象：值班人员、操作员、系统管理员</div>
+  <div class="meta">适用版本：MCS 0.9.0<br>文档版本：2026-11-23<br>适用对象：值班人员、操作员、系统管理员</div>
   <div class="foot">覆盖设备、报警、对讲、广播、寻呼、会议、系统设置与运维。<br>请结合实际网络、分区和设备配置使用。</div>
 </section>
 <nav class="toc">
@@ -890,6 +890,29 @@ MCS 按报警级别依次呼叫值班目标
 </ul>
 <p><img src="images/console-users.png" alt="用户管理"></p>
 <hr>
+<h2>12.1 授权管理</h2>
+<p>管理员进入：</p>
+<pre><code class="language-text">配置 → 授权管理
+</code></pre>
+<p>查看：</p>
+<ul>
+<li>授权状态：试用 / 已授权；</li>
+<li>客户名称；</li>
+<li>授权编号；</li>
+<li>最大话机数；</li>
+<li>已配置话机数；</li>
+<li>当前在线话机数；</li>
+<li>激活时间。</li>
+</ul>
+<p>把供应商提供的激活码粘贴到页面，点击“激活”，立即生效。</p>
+<p><img src="images/console-license.png" alt="授权管理"></p>
+<p>未激活时最多 <strong>4 台话机在线</strong>。激活后：</p>
+<ul>
+<li>新增设备不能超过授权数量；</li>
+<li>在线注册话机不能超过授权数量；</li>
+<li>已有在线话机不会被强制下线。</li>
+</ul>
+<p>当前激活码是永久授权，不绑定机器；请妥善保管供应商提供的激活码。</p>
 <h2>13. 实时日志</h2>
 <p>进入：</p>
 <pre><code class="language-text">配置 → 实时日志

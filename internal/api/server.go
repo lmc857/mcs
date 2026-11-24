@@ -19,6 +19,7 @@ import (
 	"github.com/coder/websocket"
 
 	"mcs/internal/config"
+	"mcs/internal/license"
 	"mcs/internal/logbus"
 	"mcs/internal/sipserver"
 	"mcs/internal/store"
@@ -30,6 +31,7 @@ type Server struct {
 	cdr            *store.CDRStore
 	alarms         *store.AlarmStore
 	sip            *sipserver.Server
+	license        *license.Manager
 	dataDir        string
 	db             *store.DB
 	logs           *logbus.Hub
@@ -51,6 +53,11 @@ func WithDB(db *store.DB) Option {
 // WithLogHub exposes the in-memory log ring and live subscribers.
 func WithLogHub(hub *logbus.Hub) Option {
 	return func(s *Server) { s.logs = hub }
+}
+
+// WithLicense attaches the runtime license manager.
+func WithLicense(m *license.Manager) Option {
+	return func(s *Server) { s.license = m }
 }
 
 // WithServerSettings passes the effective startup settings to the API.
@@ -82,6 +89,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("DELETE /api/v1/devices/{ext}", s.deviceDelete)
 	mux.HandleFunc("GET /api/v1/registrations", s.listDevices)
 	mux.HandleFunc("GET /api/v1/calls/active", s.activeCalls)
+	mux.HandleFunc("GET /api/v1/license", s.licenseGet)
+	mux.HandleFunc("POST /api/v1/license/activate", s.licenseActivate)
 	mux.HandleFunc("GET /api/v1/conference", s.conferenceList)
 	mux.HandleFunc("GET /api/v1/conference/audio", s.conferenceAudioGet)
 	mux.HandleFunc("PUT /api/v1/conference/audio", s.conferenceAudioSave)
@@ -155,6 +164,18 @@ func (s *Server) deviceCreate(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSON(w, 400, map[string]any{"code": "VALIDATION_FAILED", "message": "invalid json"})
 		return
+	}
+	if _, exists := s.store.Get(req.Ext); !exists && s.license != nil {
+		if max := s.license.MaxPhones(); max > 0 {
+			total, _ := s.store.Count()
+			if total >= max {
+				writeJSON(w, 403, map[string]any{
+					"code":    "LICENSE_LIMIT",
+					"message": fmt.Sprintf("授权话机数量已达上限（%d 台），请激活更多授权", max),
+				})
+				return
+			}
+		}
 	}
 	if err := s.store.UpsertDevice(req.Ext, req.Name, req.Password, req.Zone, req.Snapshot); err != nil {
 		writeJSON(w, 400, map[string]any{"code": "VALIDATION_FAILED", "message": err.Error()})
@@ -774,6 +795,45 @@ func (s *Server) conferenceList(w http.ResponseWriter, r *http.Request) {
 		rooms = []sipserver.ConferenceRoomView{}
 	}
 	writeJSON(w, 200, map[string]any{"items": rooms, "total": len(rooms)})
+}
+
+type licenseView struct {
+	license.Info
+	UsedPhones   int `json:"used_phones"`
+	OnlinePhones int `json:"online_phones"`
+}
+
+func (s *Server) licenseGet(w http.ResponseWriter, r *http.Request) {
+	if s.license == nil {
+		writeJSON(w, 503, map[string]any{"code": "UNAVAILABLE", "message": "license unavailable"})
+		return
+	}
+	used, online := s.store.Count()
+	writeJSON(w, 200, licenseView{Info: s.license.Info(), UsedPhones: used, OnlinePhones: online})
+}
+
+func (s *Server) licenseActivate(w http.ResponseWriter, r *http.Request) {
+	if s.license == nil {
+		writeJSON(w, 503, map[string]any{"code": "UNAVAILABLE", "message": "license unavailable"})
+		return
+	}
+	var req struct {
+		Code string `json:"code"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || strings.TrimSpace(req.Code) == "" {
+		writeJSON(w, 400, map[string]any{"code": "VALIDATION_FAILED", "message": "激活码不能为空"})
+		return
+	}
+	info, err := s.license.Activate(req.Code)
+	if err != nil {
+		writeJSON(w, 400, map[string]any{"code": "LICENSE_INVALID", "message": err.Error()})
+		return
+	}
+	if s.db != nil {
+		_ = s.db.SetSetting("license_code", strings.TrimSpace(req.Code))
+	}
+	used, online := s.store.Count()
+	writeJSON(w, 200, licenseView{Info: info, UsedPhones: used, OnlinePhones: online})
 }
 
 func (s *Server) conferenceAudioGet(w http.ResponseWriter, r *http.Request) {

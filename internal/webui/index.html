@@ -211,6 +211,7 @@ textarea.bc-text{margin:0 17px 12px;width:calc(100% - 34px)}
       <option value="schedules">配置 · 定时任务</option>
       <option value="settings" data-admin-only>配置 · 系统设置</option>
       <option value="users" data-admin-only>配置 · 用户管理</option>
+      <option value="license" data-admin-only>配置 · 授权管理</option>
       <option value="logs">配置 · 实时日志</option>
       <option value="tts" data-admin-only>配置 · TTS 设置</option>
       <option value="system">配置 · 系统信息</option>
@@ -228,6 +229,7 @@ textarea.bc-text{margin:0 17px 12px;width:calc(100% - 34px)}
       <button class="nav-item" data-tab="schedules" onclick="showTab('schedules')">定时任务</button>
       <button class="nav-item" data-tab="settings" data-admin-only onclick="showTab('settings')">系统设置</button>
       <button class="nav-item" data-tab="users" data-admin-only onclick="showTab('users')">用户管理</button>
+      <button class="nav-item" data-tab="license" data-admin-only onclick="showTab('license')">授权管理</button>
       <button class="nav-item" data-tab="logs" onclick="showTab('logs')">实时日志</button>
       <button class="nav-item" data-tab="tts" data-admin-only onclick="showTab('tts')">TTS 设置</button>
       <button class="nav-item" data-tab="system" onclick="showTab('system')">系统信息</button>
@@ -467,6 +469,34 @@ textarea.bc-text{margin:0 17px 12px;width:calc(100% - 34px)}
             <button class="btn" onclick="changeMyPassword()">修改密码</button>
             <span class="hint" id="me-msg"></span>
           </div>
+        </div>
+      </section>
+
+      <section id="tab-license" class="tab-panel">
+        <div class="panel">
+          <div class="panel-head"><h2>授权状态</h2><span class="hint" id="license-status">加载中…</span></div>
+          <div class="panel-body">
+            <dl class="kv">
+              <dt>客户名称</dt><dd id="license-customer">—</dd>
+              <dt>授权编号</dt><dd id="license-id">—</dd>
+              <dt>最大话机数</dt><dd id="license-max">—</dd>
+              <dt>已配置话机</dt><dd id="license-used">—</dd>
+              <dt>当前在线</dt><dd id="license-online">—</dd>
+              <dt>激活时间</dt><dd id="license-activated">—</dd>
+            </dl>
+          </div>
+          <div class="form-note" id="license-note">未激活时使用试用授权，最多 4 台话机在线。</div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h2>输入激活码</h2><span class="hint">离线激活，不需要联网</span></div>
+          <div class="form" style="display:block">
+            <textarea id="license-code" class="wide" style="width:100%;min-height:110px;font-family:monospace" placeholder="粘贴激活码"></textarea>
+            <div class="form" style="padding:12px 0 0">
+              <button class="btn btn-primary" onclick="activateLicense()">激活</button>
+              <span class="hint" id="license-msg"></span>
+            </div>
+          </div>
+          <div class="form-note">激活码与客户和话机数量绑定；请向供应商获取。激活成功后立即生效。</div>
         </div>
       </section>
 
@@ -1440,7 +1470,7 @@ function startApp(){
   loadSchedules();
   loadServerSettings();
   loadTTSConfig();
-  if(currentRole === 'admin') loadUsers();
+  if(currentRole === 'admin'){ loadUsers(); loadLicense(); }
   loadSystemInfo();
   showTab(location.hash ? location.hash.slice(1) : 'overview');
   refresh();
@@ -1588,6 +1618,43 @@ function applyRoleUI(){
     if(active && ['tab-settings','tab-users','tab-tts'].includes(active.id)) showTab('overview');
   }
   if(admin){ const t = $('user-rows'); if(t && !t.dataset.loaded) loadUsers(); }
+}
+
+async function loadLicense(){
+  if(currentRole !== 'admin') return;
+  try{
+    const d = await getJSON('/api/v1/license');
+    const licensed = !!d.activated;
+    $('license-status').textContent = licensed ? '已授权' : '试用授权';
+    $('license-customer').textContent = d.customer || '—';
+    $('license-id').textContent = d.license_id || '—';
+    $('license-max').textContent = (d.max_phones || 0) + ' 台';
+    $('license-used').textContent = (d.used_phones || 0) + ' 台';
+    $('license-online').textContent = (d.online_phones || 0) + ' 台';
+    $('license-activated').textContent = d.activated_at ? time(d.activated_at) : '—';
+    if(!licensed){
+      $('license-note').textContent = '当前为试用授权，最多 ' + (d.max_phones || 4) + ' 台话机在线；激活后提升上限。';
+    }else if((d.used_phones || 0) > (d.max_phones || 0)){
+      $('license-note').textContent = '已配置话机数超过授权数量，新增设备会被拒绝，请激活更多授权。';
+    }else{
+      $('license-note').textContent = '授权已生效；如需增加话机数量，请获取新的激活码。';
+    }
+  }catch(e){ $('license-status').textContent = '授权信息读取失败'; }
+}
+
+async function activateLicense(){
+  const code = $('license-code').value.trim();
+  if(!code){ $('license-msg').textContent = '请粘贴激活码'; return; }
+  $('license-msg').textContent = '正在验证…';
+  try{
+    const res = await fetch('/api/v1/license/activate', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({code})});
+    const d = await res.json().catch(() => ({}));
+    if(!res.ok) throw new Error(d.message || ('HTTP ' + res.status));
+    $('license-msg').textContent = '激活成功：' + (d.customer || '') + '，最多 ' + d.max_phones + ' 台话机';
+    $('license-code').value = '';
+    loadLicense();
+    refresh();
+  }catch(e){ $('license-msg').textContent = '激活失败：' + e.message; }
 }
 
 async function loadUsers(){
@@ -1893,6 +1960,7 @@ const tabMeta = {
   schedules: ['定时任务', '按 cron 自动广播'],
   settings: ['系统设置', '网络、监听地址与业务参数'],
   users: ['用户管理', '控制台账号与角色权限'],
+  license: ['授权管理', '激活码、话机数量与授权状态'],
   conference: ['电话会议', '多方言音频会议桥'],
   logs: ['实时日志', '实时查看服务器运行与呼叫日志'],
   tts: ['TTS 设置', '本地/公网语音合成服务'],
