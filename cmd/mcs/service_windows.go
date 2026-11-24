@@ -36,7 +36,7 @@ func (m *mcsService) Execute(args []string, requests <-chan svc.ChangeRequest, s
 	status <- svc.Status{State: svc.StartPending}
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
-	go func() { done <- runServer(ctx, m.configPath, m.logPath) }()
+	go func() { done <- runServer(ctx, m.configPath, m.logPath, true) }()
 	status <- svc.Status{State: svc.Running, Accepts: svc.AcceptStop | svc.AcceptShutdown}
 
 	for {

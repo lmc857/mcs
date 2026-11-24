@@ -6,11 +6,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -32,6 +35,7 @@ type Server struct {
 	alarms         *store.AlarmStore
 	sip            *sipserver.Server
 	license        *license.Manager
+	serviceMode    bool
 	dataDir        string
 	db             *store.DB
 	logs           *logbus.Hub
@@ -53,6 +57,12 @@ func WithDB(db *store.DB) Option {
 // WithLogHub exposes the in-memory log ring and live subscribers.
 func WithLogHub(hub *logbus.Hub) Option {
 	return func(s *Server) { s.logs = hub }
+}
+
+// WithServiceMode tells the restart endpoint that a Windows service manager
+// is responsible for starting a fresh process.
+func WithServiceMode(v bool) Option {
+	return func(s *Server) { s.serviceMode = v }
 }
 
 // WithLicense attaches the runtime license manager.
@@ -107,6 +117,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/v1/alarm/test", s.testAlarm)
 	mux.HandleFunc("GET /api/v1/cdr", s.cdrList)
 	mux.HandleFunc("GET /api/v1/broadcast/zones", s.broadcastZones)
+	mux.HandleFunc("POST /api/v1/broadcast/zones", s.zoneCreate)
+	mux.HandleFunc("PATCH /api/v1/broadcast/zones/{id}", s.zoneUpdate)
+	mux.HandleFunc("DELETE /api/v1/broadcast/zones/{id}", s.zoneDelete)
 	mux.HandleFunc("GET /api/v1/broadcast/active", s.broadcastActive)
 	mux.HandleFunc("GET /api/v1/broadcast/sessions", s.broadcastSessions)
 	mux.HandleFunc("GET /api/v1/broadcast/schedules", s.scheduleList)
@@ -385,6 +398,126 @@ func (s *Server) mediaDownload(w http.ResponseWriter, r *http.Request) {
 func (s *Server) broadcastZones(w http.ResponseWriter, r *http.Request) {
 	items := s.sip.BroadcastZones()
 	writeJSON(w, 200, map[string]any{"items": items, "total": len(items)})
+}
+
+func (s *Server) requireAdmin(w http.ResponseWriter, r *http.Request) bool {
+	if !s.authEnabled() {
+		return true
+	}
+	sess, ok := s.sessionFor(r)
+	if !ok || sess.role != "admin" {
+		writeJSON(w, 403, map[string]any{"code": "FORBIDDEN", "message": "admin role required"})
+		return false
+	}
+	return true
+}
+
+func (s *Server) zoneActive(id string) bool {
+	for _, v := range s.sip.BroadcastSessions(true) {
+		if v.ZoneID == id {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *Server) persistZones() {
+	if s.db == nil {
+		return
+	}
+	if raw, err := json.Marshal(s.sip.ZoneConfigs()); err == nil {
+		_ = s.db.SetSetting("zones", string(raw))
+	}
+}
+
+func (s *Server) zoneCreate(w http.ResponseWriter, r *http.Request) {
+	if !s.requireAdmin(w, r) {
+		return
+	}
+	var z config.ZoneConfig
+	if err := json.NewDecoder(r.Body).Decode(&z); err != nil {
+		writeJSON(w, 400, map[string]any{"code": "VALIDATION_FAILED", "message": "invalid json"})
+		return
+	}
+	zones := s.sip.ZoneConfigs()
+	zones = append(zones, z)
+	if err := s.sip.SetZones(zones); err != nil {
+		writeJSON(w, 400, map[string]any{"code": "VALIDATION_FAILED", "message": err.Error()})
+		return
+	}
+	s.persistZones()
+	writeJSON(w, 201, map[string]any{"status": "ok"})
+}
+
+func (s *Server) zoneUpdate(w http.ResponseWriter, r *http.Request) {
+	if !s.requireAdmin(w, r) {
+		return
+	}
+	id := r.PathValue("id")
+	if s.zoneActive(id) {
+		writeJSON(w, 409, map[string]any{"code": "ZONE_BUSY", "message": "分区正在广播，不能修改"})
+		return
+	}
+	var z config.ZoneConfig
+	if err := json.NewDecoder(r.Body).Decode(&z); err != nil {
+		writeJSON(w, 400, map[string]any{"code": "VALIDATION_FAILED", "message": "invalid json"})
+		return
+	}
+	z.ID = id
+	zones := s.sip.ZoneConfigs()
+	found := false
+	for i := range zones {
+		if zones[i].ID == id {
+			zones[i] = z
+			found = true
+			break
+		}
+	}
+	if !found {
+		writeJSON(w, 404, map[string]any{"code": "NOT_FOUND", "message": "分区不存在"})
+		return
+	}
+	if err := s.sip.SetZones(zones); err != nil {
+		writeJSON(w, 400, map[string]any{"code": "VALIDATION_FAILED", "message": err.Error()})
+		return
+	}
+	s.persistZones()
+	writeJSON(w, 200, map[string]any{"status": "ok"})
+}
+
+func (s *Server) zoneDelete(w http.ResponseWriter, r *http.Request) {
+	if !s.requireAdmin(w, r) {
+		return
+	}
+	id := r.PathValue("id")
+	if s.zoneActive(id) {
+		writeJSON(w, 409, map[string]any{"code": "ZONE_BUSY", "message": "分区正在广播，不能删除"})
+		return
+	}
+	zones := s.sip.ZoneConfigs()
+	if len(zones) <= 1 {
+		writeJSON(w, 400, map[string]any{"code": "VALIDATION_FAILED", "message": "至少保留一个广播分区"})
+		return
+	}
+	out := zones[:0]
+	found := false
+	for _, z := range zones {
+		if z.ID == id {
+			found = true
+			continue
+		}
+		out = append(out, z)
+	}
+	if !found {
+		writeJSON(w, 404, map[string]any{"code": "NOT_FOUND", "message": "分区不存在"})
+		return
+	}
+	if err := s.sip.SetZones(out); err != nil {
+		writeJSON(w, 400, map[string]any{"code": "VALIDATION_FAILED", "message": err.Error()})
+		return
+	}
+	s.persistZones()
+	writeJSON(w, 200, map[string]any{"status": "ok"})
 }
 
 func (s *Server) broadcastActive(w http.ResponseWriter, r *http.Request) {
@@ -683,7 +816,17 @@ func (s *Server) systemInterfaces(w http.ResponseWriter, r *http.Request) {
 func (s *Server) systemRestart(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 202, map[string]any{"status": "restarting"})
 	go func() {
+		// Windows SCM recovery is configured by the installer, but an existing
+		// installation may not have the failure flag set. A detached starter
+		// makes the web restart reliable even in that case.
+		if s.serviceMode && runtime.GOOS == "windows" {
+			cmd := exec.Command("cmd.exe", "/c", "timeout /t 3 /nobreak >nul & sc.exe start MCS")
+			if err := cmd.Start(); err != nil {
+				log.Printf("restart helper failed: %v", err)
+			}
+		}
 		time.Sleep(700 * time.Millisecond)
+		log.Printf("restarting MCS process")
 		os.Exit(1)
 	}()
 }

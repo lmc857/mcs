@@ -75,3 +75,22 @@ POST /api/v1/system/settings/rollback
 GET  /api/v1/system/interfaces
 POST /api/v1/system/restart
 ```
+
+
+## 网页重启失败排查
+
+网页重启通过退出进程并由 Windows 服务恢复策略拉起新进程。
+
+0.10.0 起：
+
+- 安装脚本设置 `sc.exe failureflag MCS 1`；
+- `-service` 模式退出前会启动一个辅助进程，等待后执行 `sc.exe start MCS`。
+
+如果仍失败：
+
+1. 确认服务名是 `MCS`；
+2. 运行 `Repair-Service.cmd`；
+3. 查看 `C:\ProgramData\MCS\mcs.log`；
+4. 查看 `C:\ProgramData\MCS\service-error.log`；
+5. 手动执行 `Get-Service MCS` 和 `Start-Service MCS` 验证服务本身能启动；
+6. 心跳开关不会阻止进程退出；如果开启心跳后出现，优先检查服务恢复和启动日志。

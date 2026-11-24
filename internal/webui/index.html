@@ -350,6 +350,30 @@ textarea.bc-text{margin:0 17px 12px;width:calc(100% - 34px)}
             <tbody id="bc-body"><tr><td colspan="5" class="empty">当前没有广播</td></tr></tbody>
           </table>
         </div>
+        <div class="panel" data-admin-only>
+          <div class="panel-head"><h2>广播分区管理</h2><span class="hint">保存后立即生效，不需要重启</span></div>
+          <div class="form">
+            <input type="text" id="zone-id" placeholder="分区 ID，如 a" style="flex:0 1 110px">
+            <input type="text" id="zone-name" placeholder="名称，如 A 区" style="flex:0 1 140px">
+            <input type="text" id="zone-dial" placeholder="寻呼短号，如 5001" style="flex:0 1 130px">
+            <select id="zone-codec"><option value="pcmu">PCMU</option><option value="opus">Opus</option></select>
+            <select id="zone-mode"><option value="unicast">单播</option><option value="multicast">组播</option></select>
+            <input type="text" id="zone-multicast" placeholder="组播地址，如 239.255.10.1:5004" style="flex:0 1 220px">
+          </div>
+          <div class="form">
+            <input type="text" id="zone-members" placeholder="成员分机，逗号分隔；留空=全部" class="wide">
+            <button class="btn btn-primary" onclick="saveZone()" id="zone-save-btn">新增分区</button>
+            <button class="btn" onclick="resetZoneForm()">清空</button>
+            <span class="hint" id="zone-msg"></span>
+          </div>
+          <div class="table-wrap" style="padding:0 17px 16px">
+            <table>
+              <thead><tr><th>ID</th><th>名称</th><th>寻呼短号</th><th>模式</th><th>编码</th><th>组播地址</th><th>成员</th><th>在线</th><th>操作</th></tr></thead>
+              <tbody id="zone-admin-body"><tr><td colspan="9" class="empty">加载中…</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+
         <div class="panel" data-operator-only>
           <div class="panel-head"><h2>网页实时寻呼</h2><span class="hint">麦克风 → 分区自动应答终端</span></div>
           <div class="form">
@@ -1124,6 +1148,7 @@ async function loadZones(){
       if(pzCur) pz.value = pzCur;
       if(!(data.items || []).length) pz.innerHTML = '<option value="">无可用分区</option>';
     }
+    renderZoneAdmin(data.items || []);
   }catch(e){}
 }
 
@@ -1226,6 +1251,89 @@ function renderPagingEvents(data){
       <td class="badge">${time(e.ended_at)}</td>
     </tr>`;
   }).join('');
+}
+
+let zoneConfigs = [];
+let zoneEditing = null;
+
+function renderZoneAdmin(items){
+  zoneConfigs = items || [];
+  const tbody = $('zone-admin-body');
+  if(!tbody) return;
+  if(!zoneConfigs.length){
+    tbody.innerHTML = '<tr><td colspan="9" class="empty">还没有广播分区</td></tr>';
+    return;
+  }
+  tbody.innerHTML = zoneConfigs.map(z => `<tr>
+    <td class="mono">${esc(z.id)}</td>
+    <td>${esc(z.name || '—')}</td>
+    <td class="mono">${esc(z.dial || '—')}</td>
+    <td class="badge">${z.mode === 'multicast' ? '组播' : '单播'}</td>
+    <td class="badge">${esc((z.codec || 'pcmu').toUpperCase())}</td>
+    <td class="mono">${esc(z.multicast || '—')}</td>
+    <td class="mono">${esc((z.members || []).join(',') || '全部')}</td>
+    <td>${z.online || 0}/${(z.members || []).length || '—'}</td>
+    <td><button class="test-btn" onclick="editZone('${esc(z.id)}')">编辑</button>
+        <button class="test-btn" onclick="deleteZone('${esc(z.id)}')">删除</button></td>
+  </tr>`).join('');
+}
+
+function resetZoneForm(){
+  zoneEditing = null;
+  $('zone-id').value = ''; $('zone-name').value = ''; $('zone-dial').value = '';
+  $('zone-codec').value = 'pcmu'; $('zone-mode').value = 'unicast'; $('zone-multicast').value = '';
+  $('zone-members').value = ''; $('zone-msg').textContent = '';
+  $('zone-id').disabled = false;
+  $('zone-save-btn').textContent = '新增分区';
+}
+
+function editZone(id){
+  const z = zoneConfigs.find(x => x.id === id);
+  if(!z) return;
+  zoneEditing = id;
+  $('zone-id').value = z.id; $('zone-name').value = z.name || ''; $('zone-dial').value = z.dial || '';
+  $('zone-codec').value = z.codec || 'pcmu'; $('zone-mode').value = z.mode || 'unicast';
+  $('zone-multicast').value = z.multicast || ''; $('zone-members').value = (z.members || []).join(',');
+  $('zone-id').disabled = true;
+  $('zone-save-btn').textContent = '保存修改';
+  $('zone-msg').textContent = '正在编辑 ' + z.id;
+}
+
+async function saveZone(){
+  const body = {
+    id: $('zone-id').value.trim(),
+    name: $('zone-name').value.trim(),
+    dial: $('zone-dial').value.trim(),
+    codec: $('zone-codec').value,
+    mode: $('zone-mode').value,
+    multicast: $('zone-multicast').value.trim(),
+    members: $('zone-members').value.split(',').map(x => x.trim()).filter(Boolean)
+  };
+  if(!body.id){ $('zone-msg').textContent = '分区 ID 必填'; return; }
+  const editing = zoneEditing;
+  try{
+    const res = await fetch('/api/v1/broadcast/zones' + (editing ? '/' + encodeURIComponent(editing) : ''), {
+      method: editing ? 'PATCH' : 'POST',
+      headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)
+    });
+    const d = await res.json().catch(() => ({}));
+    if(!res.ok) throw new Error(d.message || ('HTTP ' + res.status));
+    $('zone-msg').textContent = editing ? '分区已修改' : '分区已创建';
+    resetZoneForm();
+    loadZones();
+  }catch(e){ $('zone-msg').textContent = '保存失败：' + e.message; }
+}
+
+async function deleteZone(id){
+  if(!confirm('删除广播分区 ' + id + '？分区正在广播时不能删除。')) return;
+  try{
+    const res = await fetch('/api/v1/broadcast/zones/' + encodeURIComponent(id), {method:'DELETE'});
+    const d = await res.json().catch(() => ({}));
+    if(!res.ok) throw new Error(d.message || ('HTTP ' + res.status));
+    $('zone-msg').textContent = '分区已删除';
+    resetZoneForm();
+    loadZones();
+  }catch(e){ $('zone-msg').textContent = '删除失败：' + e.message; }
 }
 
 async function startBroadcast(){

@@ -38,6 +38,7 @@ $binPath = "`"$InstallDir\mcs.exe`" -service -config `"$config`" -log `"$logFile
 New-Service -Name "MCS" -BinaryPathName $binPath -DisplayName "MCS 报警对讲广播服务器" -StartupType Automatic
 sc.exe description MCS "MCS SIP server (alarm / intercom / broadcast)" | Out-Null
 sc.exe failure MCS reset= 86400 actions= restart/5000/restart/10000/restart/30000 | Out-Null
+sc.exe failureflag MCS 1 | Out-Null
 Start-Service -Name "MCS"
 
 # SIP/HTTP ports.

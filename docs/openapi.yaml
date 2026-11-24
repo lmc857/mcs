@@ -464,6 +464,27 @@ paths:
                 properties:
                   items: {type: array, items: {$ref: '#/components/schemas/Zone'}}
                   total: {type: integer}
+    post:
+      tags: [broadcast]
+      summary: 创建广播分区（admin）
+      responses:
+        '201': {description: 已创建}
+  /api/v1/broadcast/zones/{id}:
+    patch:
+      tags: [broadcast]
+      summary: 修改广播分区（admin）
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      responses:
+        '200': {description: OK}
+    delete:
+      tags: [broadcast]
+      summary: 删除广播分区（admin）
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      responses:
+        '200': {description: OK}
+
   /api/v1/broadcast/active:
     get:
       tags: [broadcast]

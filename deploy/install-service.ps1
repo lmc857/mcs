@@ -98,6 +98,7 @@ try {
   New-Service -Name $serviceName -BinaryPathName $binPath -DisplayName "MCS 报警对讲广播服务器" -StartupType Automatic
   sc.exe description $serviceName "MCS SIP server (alarm / intercom / broadcast)" | Out-Null
   sc.exe failure $serviceName reset= 86400 actions= restart/5000/restart/10000/restart/30000 | Out-Null
+  sc.exe failureflag $serviceName 1 | Out-Null
 } catch {
   Set-Status "FAIL" "Create service failed: $_"
   throw

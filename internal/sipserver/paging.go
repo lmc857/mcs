@@ -237,6 +237,8 @@ func (s *Server) pagingRecordFinish(p *pagingSession) {
 }
 
 func (s *Server) zoneByID(id string) zone {
+	s.zonesMu.RLock()
+	defer s.zonesMu.RUnlock()
 	for _, z := range s.zones {
 		if z.id == id {
 			return z

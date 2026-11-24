@@ -47,7 +47,7 @@
 | 设备管理 | ✅ Web 控制台新增/删除设备，SQLite 持久化；config 首次导入 |
 | 控制台登录 | ✅ Cookie 会话 + bcrypt，单管理员 |
 | M1 安装 | ✅ Linux systemd / Windows 原生 Service / Inno Setup 安装包 |
-| 广播 / TTS | ✅ 分区、优先级抢占、单播/组播、自动应答、逐终端状态；支持 PCMU/Opus |
+| 广播 / TTS | ✅ 分区、优先级抢占、单播/组播、自动应答、逐终端状态；支持 PCMU/Opus、网页分区管理 |
 | 电话会议 | ✅ 8 方 PCMU/PCMA 混音、网页建房/停用/删除、静音/踢出、混音录音 |
 | 会议视频/WebRTC | ✅ SIP H264 当前发言人转发、网页麦克风/摄像头加入、HTTPS/本机安全上下文 |
 | 实时寻呼 | ✅ SIP 话机拨分区短号 + 网页麦克风寻呼、PIN、权限、记录 |

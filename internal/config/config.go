@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net"
 	"os"
 	"strings"
 
@@ -380,6 +381,68 @@ func ValidateConferenceAudio(c ConferenceAudioConfig) error {
 	}
 	if c.AGCMaxGain < 1 || c.AGCMaxGain > 16 {
 		return fmt.Errorf("agc_max_gain must be 1-16")
+	}
+	return nil
+}
+
+// NormalizeZone fills defaults for a web-managed broadcast zone.
+func NormalizeZone(z ZoneConfig) ZoneConfig {
+	z.ID = strings.TrimSpace(z.ID)
+	z.Name = strings.TrimSpace(z.Name)
+	z.Dial = strings.TrimSpace(z.Dial)
+	z.Codec = strings.ToLower(strings.TrimSpace(z.Codec))
+	z.Mode = strings.ToLower(strings.TrimSpace(z.Mode))
+	z.Multicast = strings.TrimSpace(z.Multicast)
+	if z.Name == "" {
+		z.Name = z.ID
+	}
+	if z.Codec == "" {
+		z.Codec = "pcmu"
+	}
+	if z.Mode == "" {
+		z.Mode = "unicast"
+	}
+	for i, m := range z.Members {
+		z.Members[i] = strings.TrimSpace(m)
+	}
+	return z
+}
+
+// ValidateZones validates zones edited from the web console. It does not
+// resolve members against the device store; that is done by the SIP server.
+func ValidateZones(zones []ZoneConfig) error {
+	ids := map[string]bool{}
+	dials := map[string]bool{}
+	for i, raw := range zones {
+		z := NormalizeZone(raw)
+		if z.ID == "" {
+			return fmt.Errorf("zones[%d]: id required", i)
+		}
+		if ids[z.ID] {
+			return fmt.Errorf("zone id %q duplicated", z.ID)
+		}
+		ids[z.ID] = true
+		if z.Dial != "" {
+			if dials[z.Dial] {
+				return fmt.Errorf("zone dial %q duplicated", z.Dial)
+			}
+			dials[z.Dial] = true
+		}
+		if z.Codec != "pcmu" && z.Codec != "opus" {
+			return fmt.Errorf("zone %s: codec must be pcmu or opus", z.ID)
+		}
+		if z.Mode != "unicast" && z.Mode != "multicast" {
+			return fmt.Errorf("zone %s: mode must be unicast or multicast", z.ID)
+		}
+		if z.Mode == "multicast" {
+			if z.Multicast == "" {
+				return fmt.Errorf("zone %s: multicast address required", z.ID)
+			}
+			addr, err := net.ResolveUDPAddr("udp4", z.Multicast)
+			if err != nil || addr == nil || addr.IP == nil || !addr.IP.IsMulticast() {
+				return fmt.Errorf("zone %s: invalid multicast address %q", z.ID, z.Multicast)
+			}
+		}
 	}
 	return nil
 }

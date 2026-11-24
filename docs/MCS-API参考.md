@@ -413,6 +413,23 @@ Alarm 字段：
 
 ## 7. 广播
 
+### POST `/api/v1/broadcast/zones`
+
+创建广播分区（仅 admin）：
+
+```json
+{"id":"mc2","name":"组播测试","dial":"5003","codec":"pcmu",
+ "mode":"multicast","multicast":"239.255.10.2:5005","members":["1004"]}
+```
+
+### PATCH `/api/v1/broadcast/zones/{id}`
+
+修改分区（仅 admin；分区正在广播时返回 409）。
+
+### DELETE `/api/v1/broadcast/zones/{id}`
+
+删除分区（仅 admin；至少保留一个分区）。
+
 ### GET `/api/v1/broadcast/zones`
 
 ```json

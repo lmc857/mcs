@@ -47,6 +47,7 @@ type Server struct {
 	audioMu         sync.RWMutex
 	conferenceAudio config.ConferenceAudioConfig
 	mediaTranscode  bool
+	zonesMu         sync.RWMutex
 	zones           []zone
 	ttsMu           sync.RWMutex
 	ttsCfg          config.TTSConfig

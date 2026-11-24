@@ -52,7 +52,7 @@ func main() {
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	if err := runServer(ctx, *configPath, *logPath); err != nil {
+	if err := runServer(ctx, *configPath, *logPath, false); err != nil {
 		fmt.Fprintf(os.Stderr, "mcs: %v\n", err)
 		os.Exit(1)
 	}
@@ -116,7 +116,7 @@ func bootstrapUsers(db *store.DB, cfg config.Config, logger *slog.Logger) error 
 	return nil
 }
 
-func runServer(parent context.Context, configPath, logPath string) error {
+func runServer(parent context.Context, configPath, logPath string, serviceMode bool) error {
 	cfg, err := config.Load(configPath)
 	if err != nil {
 		return fmt.Errorf("%w\nhint: cp config.example.yaml config.yaml && edit it", err)
@@ -191,6 +191,19 @@ func runServer(parent context.Context, configPath, logPath string) error {
 			logger.Info("license loaded", "customer", info.Customer, "max_phones", info.MaxPhones)
 		}
 	}
+	if raw, ok := db.GetSetting("zones"); ok {
+		var saved []config.ZoneConfig
+		if err := json.Unmarshal([]byte(raw), &saved); err != nil {
+			logger.Warn("ignore invalid zones setting", "error", err)
+		} else if len(saved) > 0 {
+			if err := config.ValidateZones(saved); err != nil {
+				logger.Warn("ignore invalid zones setting", "error", err)
+			} else {
+				cfg.Zones = saved
+				logger.Info("broadcast zones loaded from db", "zones", len(saved))
+			}
+		}
+	}
 	st := store.NewWithDB(cfg.Devices, db)
 	cdr := store.NewCDRStoreDB(2000, db)
 	alarms := store.NewAlarmStoreDB(1000, db)
@@ -211,7 +224,7 @@ func runServer(parent context.Context, configPath, logPath string) error {
 	if cfg.Auth.ConsolePassword != "" {
 		apiOpts = append(apiOpts, api.WithConsoleAuth(consoleUser, cfg.Auth.ConsolePassword))
 	}
-	apiOpts = append(apiOpts, api.WithDB(db), api.WithLogHub(logHub), api.WithServerSettings(cfg.ServerSettings()), api.WithLicense(lic))
+	apiOpts = append(apiOpts, api.WithDB(db), api.WithLogHub(logHub), api.WithServerSettings(cfg.ServerSettings()), api.WithLicense(lic), api.WithServiceMode(serviceMode))
 	handler := api.New(st, cdr, alarms, sipSrv, cfg.Storage.DataDir, version, apiOpts...).Handler()
 	httpSrv := &http.Server{
 		Addr:              cfg.Server.HTTP,

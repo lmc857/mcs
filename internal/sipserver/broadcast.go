@@ -65,6 +65,8 @@ func buildZones(cfg []config.ZoneConfig, st *store.Store) []zone {
 }
 
 func (s *Server) findZone(id string) (zone, bool) {
+	s.zonesMu.RLock()
+	defer s.zonesMu.RUnlock()
 	for _, z := range s.zones {
 		if z.id == id {
 			return z, true
@@ -74,6 +76,8 @@ func (s *Server) findZone(id string) (zone, bool) {
 }
 
 func (s *Server) findZoneByDial(dial string) (zone, bool) {
+	s.zonesMu.RLock()
+	defer s.zonesMu.RUnlock()
 	for _, z := range s.zones {
 		if z.dial != "" && z.dial == dial {
 			return z, true
@@ -95,8 +99,11 @@ type ZoneView struct {
 }
 
 func (s *Server) BroadcastZones() []ZoneView {
-	out := make([]ZoneView, 0, len(s.zones))
-	for _, z := range s.zones {
+	s.zonesMu.RLock()
+	zones := append([]zone(nil), s.zones...)
+	s.zonesMu.RUnlock()
+	out := make([]ZoneView, 0, len(zones))
+	for _, z := range zones {
 		v := ZoneView{ID: z.id, Name: z.name, Dial: z.dial, Codec: z.codec, Mode: z.mode, Members: z.members}
 		if z.multicast != nil {
 			v.Multicast = z.multicast.String()
@@ -859,3 +866,44 @@ func (s *Server) BroadcastSessions(activeOnly bool) []BroadcastView {
 }
 
 var broadcastSeq atomic.Uint64
+
+// ZoneConfigs returns a copy of the effective broadcast-zone configuration.
+func (s *Server) ZoneConfigs() []config.ZoneConfig {
+	s.zonesMu.RLock()
+	defer s.zonesMu.RUnlock()
+	out := make([]config.ZoneConfig, 0, len(s.zones))
+	for _, z := range s.zones {
+		members := append([]string(nil), z.members...)
+		mc := ""
+		if z.multicast != nil {
+			mc = z.multicast.String()
+		}
+		out = append(out, config.ZoneConfig{
+			ID: z.id, Name: z.name, Dial: z.dial, Codec: z.codec,
+			Members: members, Mode: z.mode, Multicast: mc,
+		})
+	}
+	return out
+}
+
+// SetZones validates and atomically replaces the runtime zones. It is used by
+// the web console; the caller is responsible for persisting the config.
+func (s *Server) SetZones(zones []config.ZoneConfig) error {
+	if len(zones) == 0 {
+		return fmt.Errorf("至少保留一个广播分区")
+	}
+	for i := range zones {
+		zones[i] = config.NormalizeZone(zones[i])
+	}
+	if err := config.ValidateZones(zones); err != nil {
+		return err
+	}
+	zones2 := buildZones(zones, s.store)
+	if len(zones2) == 0 {
+		return fmt.Errorf("分区没有可用成员")
+	}
+	s.zonesMu.Lock()
+	s.zones = zones2
+	s.zonesMu.Unlock()
+	return nil
+}
