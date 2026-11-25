@@ -50,7 +50,7 @@ body { margin:0; color:var(--ink); font-family:"PingFang SC","Microsoft YaHei","
   <div class="kicker">报警 · 对讲 · 广播融合通信服务器</div>
   <h1>MCS 用户<br>使用手册</h1>
   <div class="rule"></div>
-  <div class="meta">适用版本：MCS 0.13.0<br>文档版本：2026-11-23<br>适用对象：值班人员、操作员、系统管理员</div>
+  <div class="meta">适用版本：MCS 0.13.1<br>文档版本：2026-11-23<br>适用对象：值班人员、操作员、系统管理员</div>
   <div class="foot">覆盖设备、报警、对讲、广播、寻呼、会议、系统设置与运维。<br>请结合实际网络、分区和设备配置使用。</div>
 </section>
 <nav class="toc">
@@ -334,8 +334,16 @@ body { margin:0; color:var(--ink); font-family:"PingFang SC","Microsoft YaHei","
 <li>型号/固件（终端上报时显示）；</li>
 <li>最后注册时间；</li>
 <li>租期至；</li>
-<li>删除按钮。</li>
+<li>编辑/删除按钮。</li>
 </ul>
+<p>点击“编辑”可以修改：</p>
+<ul>
+<li>名称；</li>
+<li>区域；</li>
+<li>SIP 密码；</li>
+<li>抓拍 URL。</li>
+</ul>
+<p>SIP 密码留空表示不修改。修改密码后，该设备会立即离线，话机上的 SIP 密码也要同步修改，然后用新密码重新注册。</p>
 <h3>5.3 SIP 终端配置</h3>
 <p>在话机、门口机、音箱中配置：</p>
 <pre><code class="language-text">SIP 服务器：MCS 的 IP

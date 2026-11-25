@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: MCS API
-  version: 0.13.0
+  version: 0.13.1
   description: |
     MCS 报警/对讲/广播服务器当前实现接口。
     启用控制台登录后，除登录、会话、健康检查外均需 Cookie 会话。

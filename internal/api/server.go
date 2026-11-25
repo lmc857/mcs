@@ -218,6 +218,7 @@ func (s *Server) deviceUpdate(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 400, map[string]any{"code": "VALIDATION_FAILED", "message": "invalid json"})
 		return
 	}
+	oldPassword, _ := s.store.Password(ext)
 	name, password, zone, snapshot := cur.Name, "", cur.Zone, cur.Snapshot
 	if req.Name != nil {
 		name = *req.Name
@@ -231,9 +232,15 @@ func (s *Server) deviceUpdate(w http.ResponseWriter, r *http.Request) {
 	if req.Snapshot != nil {
 		snapshot = *req.Snapshot
 	}
+	passwordChanged := req.Password != nil && *req.Password != "" && *req.Password != oldPassword
 	if err := s.store.UpsertDevice(ext, name, password, zone, snapshot); err != nil {
 		writeJSON(w, 400, map[string]any{"code": "VALIDATION_FAILED", "message": err.Error()})
 		return
+	}
+	if passwordChanged {
+		// The old digest credential must not remain usable. Force the device
+		// to re-register with the new password.
+		s.store.Unregister(ext)
 	}
 	dev, _ := s.store.Get(ext)
 	writeJSON(w, 200, dev)

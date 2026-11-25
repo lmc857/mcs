@@ -1,6 +1,6 @@
 # MCS 测试与兼容性
 
-> 当前代码 `0.13.0`。本文记录自动化测试覆盖、已验证环境与已知兼容边界，不是第三方认证报告。
+> 当前代码 `0.13.1`。本文记录自动化测试覆盖、已验证环境与已知兼容边界，不是第三方认证报告。
 
 ## 1. 自动化测试
 
@@ -30,7 +30,7 @@ go test -race ./internal/sipserver ./internal/api ./internal/store ./internal/tt
 | `real_tts_test.go` | `MCS_REAL_TTS=1` 时调用真实 Kokoro |
 | `internal/config/settings_test.go` | 服务器设置、TLS/SRTP、STUN/TURN URL/凭据/公网 IP 校验 |
 | `internal/store/sqlite_test.go` | CDR/报警/设备写库、重启恢复、schema 幂等 |
-| `internal/api/server_test.go` | WebSocket 报警、登录/Cookie、设备 CRUD、抓拍代理 |
+| `internal/api/server_test.go` | WebSocket 报警、登录/Cookie、设备 CRUD/改密、抓拍代理 |
 | `internal/tts/client_test.go` | OpenAI 兼容认证/模型、MiniMax hex 音频、缓存、错误响应 |
 
 ## 2. 已验证环境

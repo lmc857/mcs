@@ -1,7 +1,7 @@
 # MCS · 报警 / 对讲 / 广播融合通信服务器
 
 > 产品代号 **MCS**（暂定）。面向报警运营、园区、校园、医院、工地等场景的私有化通信服务器。
-> 当前版本：**0.13.0**。注册/呼叫/录音/报警升级/广播/对讲视频·开锁·抓拍/WebRTC/授权/网页分区/TLS/SRTP 已打通。
+> 当前版本：**0.13.1**。注册/呼叫/录音/报警升级/广播/对讲视频·开锁·抓拍/WebRTC/授权/网页分区/TLS/SRTP 已打通。
 
 ## 文档
 
@@ -45,8 +45,8 @@
 | SIP over TLS | ✅ 可选 5061，PEM 证书，TLS 1.2+ |
 | HTTPS 控制台 | ✅ 可选 8443，复用/独立 PEM 证书 |
 | SRTP（SDES） | ✅ 音频/视频，AES_CM_128_HMAC_SHA1_80/32，按腿独立密钥 |
-| 设备管理 | ✅ Web 控制台新增/删除设备，SQLite 持久化；config 首次导入 |
-| 控制台登录 | ✅ Cookie 会话 + bcrypt，单管理员 |
+| 设备管理 | ✅ Web 新增/编辑/删除设备，可修改 SIP 密码；SQLite 持久化 |
+| 控制台登录 | ✅ Cookie 会话 + bcrypt，admin/operator/viewer |
 | M1 安装 | ✅ Linux systemd / Windows 原生 Service / Inno Setup 安装包 |
 | 广播 / TTS | ✅ 分区、优先级抢占、单播/组播、自动应答、逐终端状态；支持 PCMU/Opus、网页分区管理 |
 | 电话会议 | ✅ 8 方 PCMU/PCMA 混音、网页建房/停用/删除、静音/踢出、混音录音 |

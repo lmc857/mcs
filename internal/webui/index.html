@@ -189,6 +189,34 @@ textarea.bc-text{margin:0 17px 12px;width:calc(100% - 34px)}
   </div>
 </div>
 
+<div id="device-modal" class="modal" hidden>
+  <div class="modal-card" style="width:min(460px,94vw);padding:20px">
+    <div class="modal-head"><strong>编辑设备</strong><button class="test-btn" onclick="closeDeviceEditor()">关闭</button></div>
+    <div class="form" style="display:block">
+      <label class="field">分机
+        <input type="text" id="dev-edit-ext" disabled>
+      </label>
+      <label class="field">名称
+        <input type="text" id="dev-edit-name">
+      </label>
+      <label class="field">区域
+        <input type="text" id="dev-edit-zone">
+      </label>
+      <label class="field">新 SIP 密码
+        <input type="password" id="dev-edit-pass" placeholder="留空表示不修改" autocomplete="new-password">
+      </label>
+      <label class="field">抓拍 URL
+        <input type="text" id="dev-edit-snapshot">
+      </label>
+      <div class="form" style="padding:4px 0 0">
+        <button class="btn btn-primary" onclick="saveDeviceEdit()">保存修改</button>
+        <span class="hint" id="dev-edit-msg"></span>
+      </div>
+      <div class="form-note">修改密码后该设备会立即离线，需要用新密码重新注册；话机上的 SIP 密码也要同步修改。</div>
+    </div>
+  </div>
+</div>
+
 <div id="alarm-banner" class="alarm-banner" hidden>
   <div><strong>报警</strong> <span id="alarm-text"></span></div>
   <button onclick="hideAlarm()">关闭</button>
@@ -793,8 +821,11 @@ async function getJSON(url){
   return res.json();
 }
 
+let deviceItems = [];
+
 function renderDevices(data){
   const items = data.items || [];
+  deviceItems = items;
   $('total').textContent = data.total ?? items.length;
   $('online').textContent = data.online ?? items.filter(d => d.online).length;
   const online = data.online ?? 0, total = data.total ?? items.length;
@@ -815,7 +846,8 @@ function renderDevices(data){
       <td class="badge">${esc(d.model || '—')}${d.firmware ? ' / ' + esc(d.firmware) : ''}</td>
       <td class="badge">${time(d.last_seen)}</td>
       <td class="badge">${d.online ? time(d.expires_at) : '—'}</td>
-      <td><button class="test-btn" onclick="deleteDevice('${esc(d.ext)}')">删除</button></td>
+      <td><button class="test-btn" onclick="editDevice('${esc(d.ext)}')">编辑</button>
+          <button class="test-btn" onclick="deleteDevice('${esc(d.ext)}')">删除</button></td>
     </tr>`).join('');
 }
 
@@ -1730,6 +1762,47 @@ async function addDevice(){
     $('dev-ext').value = ''; $('dev-name').value = ''; $('dev-pass').value = ''; $('dev-snapshot').value = '';
     refresh();
   }catch(e){ $('dev-msg').textContent = '添加失败：' + e.message; }
+}
+
+function editDevice(ext){
+  const d = deviceItems.find(x => x.ext === ext);
+  if(!d){ alert('设备不存在'); return; }
+  $('dev-edit-ext').value = d.ext;
+  $('dev-edit-name').value = d.name || '';
+  $('dev-edit-zone').value = d.zone || '';
+  $('dev-edit-pass').value = '';
+  $('dev-edit-snapshot').value = d.snapshot || '';
+  $('dev-edit-msg').textContent = '';
+  $('device-modal').hidden = false;
+}
+
+function closeDeviceEditor(){
+  $('device-modal').hidden = true;
+  $('dev-edit-pass').value = '';
+}
+
+async function saveDeviceEdit(){
+  const ext = $('dev-edit-ext').value;
+  const body = {
+    name: $('dev-edit-name').value.trim(),
+    zone: $('dev-edit-zone').value.trim(),
+    snapshot: $('dev-edit-snapshot').value.trim()
+  };
+  if(!body.name){ $('dev-edit-msg').textContent = '名称不能为空'; return; }
+  const pass = $('dev-edit-pass').value;
+  if(pass) body.password = pass;
+  $('dev-edit-msg').textContent = '正在保存…';
+  try{
+    const res = await fetch('/api/v1/devices/' + encodeURIComponent(ext), {
+      method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)
+    });
+    const d = await res.json().catch(() => ({}));
+    if(!res.ok) throw new Error(d.message || ('HTTP ' + res.status));
+    $('dev-edit-msg').textContent = pass ? '已保存；设备需用新密码重新注册' : '已保存';
+    closeDeviceEditor();
+    $('dev-msg').textContent = pass ? '密码已修改，设备已下线' : '设备信息已更新';
+    refresh();
+  }catch(e){ $('dev-edit-msg').textContent = '保存失败：' + e.message; }
 }
 
 async function deleteDevice(ext){

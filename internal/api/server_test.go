@@ -233,6 +233,27 @@ func TestConsoleAuthAndDeviceCRUD(t *testing.T) {
 		t.Fatalf("create device status = %d body=%s", res.StatusCode, body)
 	}
 	res.Body.Close()
+	if !st.Register("1009", "<sip:1009@127.0.0.1:15060>", "127.0.0.1:15060", "udp", "", "", "", time.Minute) {
+		t.Fatal("register test device")
+	}
+	req, _ = http.NewRequest(http.MethodPatch, ts.URL+"/api/v1/devices/1009", strings.NewReader(`{"password":"new-pass-1009","name":"renamed"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.AddCookie(cookie)
+	res, err = client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.StatusCode != 200 {
+		body, _ := io.ReadAll(res.Body)
+		t.Fatalf("patch device status = %d body=%s", res.StatusCode, body)
+	}
+	res.Body.Close()
+	if !st.Authenticate("1009", "new-pass-1009") || st.Authenticate("1009", "pass-1009") {
+		t.Fatal("device password was not updated")
+	}
+	if dev, _ := st.Get("1009"); dev.Online {
+		t.Fatal("password change did not drop old registration")
+	}
 
 	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/v1/devices", nil)
 	req.AddCookie(cookie)

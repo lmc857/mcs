@@ -1,6 +1,6 @@
 # MCS API 参考（当前实现）
 
-> 适用版本：`0.13.0` 当前代码。
+> 适用版本：`0.13.1` 当前代码。
 > 文中只列 **已经实现** 的接口；规划中的接口见 [MCS-接口与数据模型.md](MCS-接口与数据模型.md)，不要直接对接规划稿。
 > 机器可读版本：[openapi.yaml](openapi.yaml)。
 
@@ -356,6 +356,8 @@ WebSocket 实时日志：
 ### PATCH `/api/v1/devices/{ext}`
 
 字段均可选：`name`、`password`、`zone`、`snapshot`；`password` 为空表示不改。
+
+修改密码成功后，MCS 会注销该设备当前注册，设备需要立即用新密码重新注册；旧密码随即失效。
 
 ### DELETE `/api/v1/devices/{ext}`
 
