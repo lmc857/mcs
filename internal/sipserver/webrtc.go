@@ -141,7 +141,7 @@ func (s *Server) HandleWebRTCOffer(ctx context.Context, callID, offerSDP string,
 	if tap == nil || audioTap == nil {
 		return "", fmt.Errorf("call has no video")
 	}
-	pc, err := webrtc.NewPeerConnection(webrtc.Configuration{})
+	pc, err := s.newPeerConnection()
 	if err != nil {
 		return "", err
 	}

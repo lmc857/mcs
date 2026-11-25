@@ -50,6 +50,7 @@ type Server struct {
 	zonesMu         sync.RWMutex
 	zones           []zone
 	srtpMode        string
+	webrtcCfg       config.WebRTCConfig
 	ttsMu           sync.RWMutex
 	ttsCfg          config.TTSConfig
 	ttsClient       *tts.Client
@@ -79,6 +80,7 @@ type Options struct {
 	Zones           []config.ZoneConfig
 	SRTPMode        string
 	TLSClientConfig *tls.Config
+	WebRTC          config.WebRTCConfig
 }
 
 func New(st *store.Store, auth *Authenticator, cdr *store.CDRStore, alarms *store.AlarmStore, opts Options, log *slog.Logger) (*Server, error) {
@@ -125,6 +127,7 @@ func New(st *store.Store, auth *Authenticator, cdr *store.CDRStore, alarms *stor
 		mediaTranscode:  opts.Media.Transcode,
 		zones:           buildZones(opts.Zones, st),
 		srtpMode:        opts.SRTPMode,
+		webrtcCfg:       opts.WebRTC,
 		ttsCfg:          opts.TTS,
 		ttsClient: tts.NewFromConfig(tts.Config{
 			Provider: opts.TTS.Provider, BaseURL: opts.TTS.BaseURL, APIKey: opts.TTS.APIKey,

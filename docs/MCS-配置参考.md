@@ -24,6 +24,34 @@
 
 > `advertise` 的端口要和终端实际访问的 SIP 端口一致。只启用 TLS 时通常应写 `host:5061`。
 
+## webrtc
+
+| 字段 | 默认 | 说明 |
+| --- | --- | --- |
+| `ice_servers` | 空 | STUN/TURN 列表 |
+| `ice_servers[].urls` | 空 | 例如 `stun:stun.example.com:3478`、`turn:turn.example.com:3478?transport=udp` |
+| `ice_servers[].username` | 空 | TURN 用户名 |
+| `ice_servers[].credential` | 空 | TURN 密码 |
+| `public_ip` | 空 | MCS 公网 IP；服务器在 NAT 后时发布 host candidate 使用 |
+
+```yaml
+webrtc:
+  ice_servers:
+    - urls: ["stun:stun.example.com:3478"]
+    - urls: ["turn:turn.example.com:3478?transport=udp"]
+      username: "mcs"
+      credential: "secret"
+  public_ip: "203.0.113.10"
+```
+
+这些字段也可以在网页“系统设置”修改：
+
+- STUN 地址；
+- TURN 地址、用户名、密码；
+- WebRTC 公网 IP。
+
+TURN 需要使用标准 coturn/Pion TURN 服务；MCS 不内置 TURN 服务。
+
 ## storage
 
 | 字段 | 默认 | 说明 |

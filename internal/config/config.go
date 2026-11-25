@@ -21,6 +21,7 @@ type Config struct {
 	Conference   ConferenceConfig   `yaml:"conference"`
 	Media        MediaConfig        `yaml:"media"`
 	TTS          TTSConfig          `yaml:"tts"`
+	WebRTC       WebRTCConfig       `yaml:"webrtc"`
 	Zones        []ZoneConfig       `yaml:"zones"`
 	Devices      []DeviceConfig     `yaml:"devices"`
 }
@@ -112,6 +113,17 @@ type BroadcastConfig struct {
 }
 
 // MediaConfig controls optional media compatibility handling.
+type ICEServerConfig struct {
+	URLs       []string `yaml:"urls" json:"urls"`
+	Username   string   `yaml:"username" json:"username,omitempty"`
+	Credential string   `yaml:"credential" json:"credential,omitempty"`
+}
+
+type WebRTCConfig struct {
+	ICEServers []ICEServerConfig `yaml:"ice_servers" json:"ice_servers"`
+	PublicIP   string            `yaml:"public_ip" json:"public_ip"`
+}
+
 type MediaConfig struct {
 	// Transcode enables G.711 A/U conversion when the two legs negotiated
 	// different codecs. Default false: relay codecs as negotiated by the

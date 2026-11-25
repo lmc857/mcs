@@ -184,6 +184,14 @@ func runServer(parent context.Context, configPath, logPath string, serviceMode b
 					saved.SRTPMode = cfg.Server.SRTPMode
 				}
 			}
+			if saved.Version < 3 && len(saved.STUNURLs) == 0 && len(saved.TURNURLs) == 0 && saved.WebRTCPublicIP == "" {
+				ws := cfg.ServerSettings()
+				saved.STUNURLs = ws.STUNURLs
+				saved.TURNURLs = ws.TURNURLs
+				saved.TURNUsername = ws.TURNUsername
+				saved.TURNPassword = ws.TURNPassword
+				saved.WebRTCPublicIP = ws.WebRTCPublicIP
+			}
 			if err := cfg.ApplyServerSettings(saved); err != nil {
 				logger.Warn("ignore invalid server settings", "error", err)
 			} else {
@@ -238,7 +246,7 @@ func runServer(parent context.Context, configPath, logPath string, serviceMode b
 	sipSrv, err := sipserver.New(st, auth, cdr, alarms, sipserver.Options{
 		Domain: cfg.Server.Domain, Advertise: cfg.Server.Advertise, DataDir: cfg.Storage.DataDir,
 		Alarm: cfg.Alarm, Registration: cfg.Registration, Broadcast: cfg.Broadcast, Paging: cfg.Paging, Conference: cfg.Conference, Media: cfg.Media, TTS: ttsCfg, Zones: cfg.Zones, License: lic,
-		TLSClientConfig: tlsClient, SRTPMode: cfg.Server.SRTPMode,
+		TLSClientConfig: tlsClient, SRTPMode: cfg.Server.SRTPMode, WebRTC: cfg.WebRTC,
 	}, logger)
 	if err != nil {
 		return fmt.Errorf("init sip server: %w", err)

@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: MCS API
-  version: 0.12.0
+  version: 0.13.0
   description: |
     MCS 报警/对讲/广播服务器当前实现接口。
     启用控制台登录后，除登录、会话、健康检查外均需 Cookie 会话。
@@ -602,6 +602,12 @@ paths:
         '200': {description: WAV, content: {audio/wav: {schema: {type: string, format: binary}}}}
         '404': {description: 不存在}
 
+  /api/v1/webrtc/config:
+    get:
+      tags: [webrtc]
+      summary: 浏览器 ICE 配置（STUN/TURN）
+      responses:
+        '200': {description: OK}
   /api/v1/webrtc/offer:
     post:
       tags: [webrtc]

@@ -1,6 +1,6 @@
 # MCS 使用手册
 
-本手册对应当前 `0.12.0` 代码，面向部署、联调和值班人员。
+本手册对应当前 `0.13.0` 代码，面向部署、联调和值班人员。
 规划/设计文档见 [产品方案](MCS-产品方案.md)、[技术方案](MCS-技术方案.md)；接口细节见 [API 参考](MCS-API参考.md)。
 
 ## 1. 当前能力
@@ -208,7 +208,7 @@ GET /api/v1/paging/events?limit=50
 - 浏览器弹窗接收门口机音视频；允许麦克风后可对讲；
 - “开锁”发送 DTMF INFO（默认 `#`）；
 - “抓拍”打开设备 `snapshot` 配置的 HTTP 图片；
-- 视频只支持浏览器接收，暂不支持浏览器视频回传/TURN。
+- 视频只支持浏览器接收，暂不支持浏览器视频回传。
 
 ## 5. TLS / HTTPS / SRTP
 
@@ -223,7 +223,7 @@ server:
 
 只启用 TLS 时，`advertise` 端口改成 5061。终端需信任证书或手动接受自签证书。
 
-0.12.0 起也可以全部在网页“系统设置”中配置，不需要改配置文件。
+0.13.0 起也可以全部在网页“系统设置”中配置，不需要改配置文件。
 
 MCS 出站 B 腿会保留终端注册时的 `transport=tls`，并支持用 `tls_ca` 信任私有 CA；内网测试可开启 `tls_insecure`。
 
@@ -255,6 +255,28 @@ MCS 自动逐腿解密/重加密，支持 `AES_CM_128_HMAC_SHA1_80/32`、音频/
 - 网页可以设置 `srtp_mode`：`auto` / `required` / `off`。
 - SDES 密钥在 SDP 中，**必须配合 SIP over TLS**，否则密钥明文传输。
 - 寻呼、广播、组呼仍是明文 RTP。
+
+### 5.4 ICE / STUN / TURN
+
+WebRTC 默认只有 host candidate。需要跨网段/公网时，在网页“系统设置”配置：
+
+- STUN URL；
+- TURN URL；
+- TURN 用户名/密码；
+- WebRTC 公网 IP。
+
+MCS 不内置 STUN/TURN 服务，使用标准 coturn 即可；MCS 作为 ICE 客户端，把配置同时下发给 Pion 和浏览器。
+
+coturn 参考要求：
+
+- 3478 UDP/TCP；
+- TURN TLS 5349（可选）；
+- 中继 UDP 端口范围；
+- `external-ip=公网IP/内网IP`；
+- `lt-cred-mech` 用户认证；
+- 防火墙放行中继端口。
+
+浏览器通过 ICE 配置拿到 TURN 账号；建议使用专用 TURN 账号并限制带宽。
 
 ## 6. 设备管理
 
@@ -368,7 +390,7 @@ lsof -nP -iTCP:8080 -sTCP:LISTEN
 
 - 页面必须是 `localhost` 或 HTTPS（麦克风要求安全上下文）；
 - 活动呼叫必须带视频（`video=true`）；
-- 跨 NAT 没有 TURN，可能 ICE 失败；
+- 跨 NAT 需要配置 STUN/TURN，否则可能 ICE 失败；
 - 浏览器需支持 H.264。
 
 ### 8.6 SRTP 呼叫失败
@@ -391,6 +413,6 @@ lsof -nP -iTCP:8080 -sTCP:LISTEN
 - 设备 INVITE 未做 Digest 鉴权；
 - 寻呼/广播/组呼无 SRTP；
 - 无 SRTCP 之外的 DTLS-SRTP SIP 终端；
-- 无 TURN，跨公网 WebRTC 不稳定；
+- 未配置 TURN 时，跨公网 WebRTC 不稳定；
 - RTP 端口动态，未做固定端口段；
 - 无视频录像、ONVIF/RTSP、消防联动、短信/Webhook。

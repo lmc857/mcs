@@ -33,7 +33,7 @@ func (s *Server) HandlePagingWebRTC(ctx context.Context, zoneID, username, pin, 
 	if err != nil {
 		return "", "", fmt.Errorf("分区忙：%w", err)
 	}
-	pc, err := webrtc.NewPeerConnection(webrtc.Configuration{})
+	pc, err := s.newPeerConnection()
 	if err != nil {
 		bc.stop("failed")
 		return "", "", err

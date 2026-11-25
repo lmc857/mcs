@@ -1,7 +1,7 @@
 # MCS · 报警 / 对讲 / 广播融合通信服务器
 
 > 产品代号 **MCS**（暂定）。面向报警运营、园区、校园、医院、工地等场景的私有化通信服务器。
-> 当前版本：**0.12.0**。注册/呼叫/录音/报警升级/广播/对讲视频·开锁·抓拍/WebRTC/授权/网页分区/TLS/SRTP 已打通。
+> 当前版本：**0.13.0**。注册/呼叫/录音/报警升级/广播/对讲视频·开锁·抓拍/WebRTC/授权/网页分区/TLS/SRTP 已打通。
 
 ## 文档
 
@@ -13,7 +13,7 @@
 | [授权管理](docs/MCS-授权管理.md) | 激活码、话机数量限制、试用授权、签发工具 |
 | [部署与运维手册](docs/MCS-使用手册.md) | 安装、TLS/SRTP、端口目录、运维、技术排障 |
 | [API 参考](docs/MCS-API参考.md) | 当前已实现的 REST / WebSocket 接口 |
-| [OpenAPI](docs/openapi.yaml) | 机器可读的 OpenAPI 3 规范（50 个路径） |
+| [OpenAPI](docs/openapi.yaml) | 机器可读的 OpenAPI 3 规范（51 个路径） |
 | [测试与兼容性](docs/MCS-测试与兼容性.md) | 自动化覆盖、已验证环境、终端兼容边界 |
 | [真机测试指南](docs/MCS-真机测试指南.md) | LAN 拓扑、终端配置、测试用例、抓包排查 |
 | [广播终端接入](docs/MCS-广播终端接入.md) | 广播协议、Alert-Info、SDP、单播/组播终端要求 |
@@ -55,14 +55,14 @@
 | 视频对讲（SIP） | ✅ H.264 透传，双向视频中继 |
 | 远程开锁 | ✅ 通话中向门口机发送 DTMF INFO |
 | 抓拍 | ✅ 按设备配置的 HTTP 快照地址代理返回图片 |
-| WebRTC 视频窗 | ✅ 浏览器接收 H.264 视频 |
+| WebRTC 视频窗 | ✅ 浏览器接收 H.264 视频；支持 STUN/TURN ICE |
 | WebRTC 双向音频 | ✅ 浏览器麦克风 → 对讲门口机；门口机声音 → 浏览器 |
 | 音频库 | ✅ 上传 WAV/MP3、列表、下载、删除、按库播放 |
 | 定时广播 | ✅ 5 段 cron、启停、持久化、到期自动 TTS/音频 |
 | TTS | ✅ 本地 Kokoro、OpenAI、千问、MiniMax；控制台可配、缓存 |
 | REST / WS API | ✅ 设备、通话、话单、报警、广播、事件流 |
 | 模拟注册 | ✅ `cmd/uasim` 批量注册，开发联调用 |
-| WebRTC 视频回传 / TURN / 寻呼 | ⏳ 下一阶段 |
+| WebRTC 视频回传 | ⏳ 下一阶段（STUN/TURN 已支持） |
 
 跨平台二进制已可产出（Linux x86_64/arm64、Windows amd64、macOS arm64/amd64），单文件约 18MB（含 Pion + SQLite）。
 
@@ -170,6 +170,7 @@ MCS 的 `tts.voice_zh` / `tts.voice_en` 默认 `zf_001` / `af_heart`，按文本
 | `GET /api/v1/media/{id}/download` | 下载音频 |
 | `GET/POST /api/v1/broadcast/schedules` | 定时任务列表 / 新增 |
 | `PATCH/DELETE /api/v1/broadcast/schedules/{id}` | 启停 / 删除 |
+| `GET /api/v1/webrtc/config` | 浏览器 ICE/STUN/TURN 配置 |
 | `POST /api/v1/webrtc/offer` | 浏览器 WebRTC 双向音频 + 视频接收 offer/answer |
 | `GET /api/v1/ws` | WebSocket 事件（call/alarm/device/broadcast） |
 
@@ -218,7 +219,7 @@ sudo ./install-linux.sh ./mcs ./config.example.yaml
 - 注册状态在内存（重启重新注册）；设备/话单/报警已落 SQLite。`config.yaml` 只在设备表为空时首次导入，之后以 DB 为准。
 - 报警策略只做了“配置化多级顺序升级”：没有排班、并行同振、可视化策略编辑和 Webhook 通知；超时/忙自动下一级，全部失败返回 480。
 - 实时寻呼支持 SIP 话机和网页麦克风；消防联动尚未实现。
-- 浏览器视频只做接收；视频回传、TURN、视频录像未做。SIP 终端之间仍只做 H.264 透传。
+- 浏览器视频只做接收；STUN/TURN 已支持，视频回传/视频录像未做。SIP 终端之间仍只做 H.264 透传。
 - 抓拍依赖设备配置 `snapshot` HTTP 地址；开锁只发 DTMF INFO，HTTP 开锁/厂商私有指令未做。
 - 寻呼/呼叫 INVITE 暂未做 Digest 鉴权，生产前需要补。
 - 音频库接受 PCM16 WAV 或 MP3；单文件上限 20MB；MP3 解码后重采样/编码。
@@ -246,7 +247,7 @@ poc/sipgo-smoke/      sipgo 最小验证
 ## 下一阶段
 
 1. DTLS-SRTP 终端、寻呼/广播 SRTP；多用户 RBAC、登录失败锁定；
-2. 对讲：WebRTC 视频回传、TURN、视频录像；
+2. 对讲：WebRTC 视频回传、视频录像；
 3. 广播：WebRTC 麦克风寻呼、消防联动、节假日日历；
 4. 报警排班、并行同振、Webhook/短信通知；
 5. 固定 RTP 端口段 + 跨平台安装包签名。

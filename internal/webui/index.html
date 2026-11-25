@@ -588,6 +588,23 @@ textarea.bc-text{margin:0 17px 12px;width:calc(100% - 34px)}
             </label>
           </div>
           <div class="form">
+            <label class="field" style="flex:1 1 48%">STUN 地址（逗号/换行分隔）
+              <input type="text" id="settings-stun-urls" placeholder="stun:stun.example.com:3478">
+            </label>
+            <label class="field" style="flex:1 1 48%">WebRTC 公网 IP（可选）
+              <input type="text" id="settings-webrtc-public-ip" placeholder="203.0.113.10">
+            </label>
+            <label class="field" style="flex:1 1 48%">TURN 地址（逗号/换行分隔）
+              <input type="text" id="settings-turn-urls" placeholder="turn:turn.example.com:3478?transport=udp">
+            </label>
+            <label class="field">TURN 用户名
+              <input type="text" id="settings-turn-user" placeholder="mcs">
+            </label>
+            <label class="field">TURN 密码
+              <input type="password" id="settings-turn-pass" placeholder="留空保持当前">
+            </label>
+          </div>
+          <div class="form">
             <label class="field" style="flex:1 1 100%">Alert-Info 自动应答头
               <input type="text" id="settings-auto-answer" placeholder="&lt;http://127.0.0.1&gt;;info=alert-autoanswer">
             </label>
@@ -612,6 +629,7 @@ textarea.bc-text{margin:0 17px 12px;width:calc(100% - 34px)}
           </div>
           <div class="form-note">
             保存后需重启生效；重启会中断通话和广播。监听地址只填写当前服务器实际使用的地址，多网段时请选择设备所在网卡的 IP。<br>
+            STUN/TURN 使用标准服务器（推荐 coturn），MCS 只作为 ICE 客户端；TURN 密码会下发给登录后的浏览器。<br>
             当前生效：<span id="settings-active" class="mono"></span>
           </div>
         </div>
@@ -803,6 +821,18 @@ function renderDevices(data){
 
 let conferenceRooms = [];
 let confPC = null, confLocalStream = null;
+let webrtcIceServers = [];
+let webrtcConfigPromise = null;
+
+async function ensureWebRTCConfig(){
+  if(webrtcConfigPromise) return webrtcConfigPromise;
+  webrtcConfigPromise = getJSON('/api/v1/webrtc/config').then(d => {
+    webrtcIceServers = d.ice_servers || [];
+  }).catch(() => { webrtcIceServers = []; });
+  return webrtcConfigPromise;
+}
+
+function loadWebRTCConfig(){ return ensureWebRTCConfig(); }
 
 function preferConferenceCodecs(pc){
   for (const tr of pc.getTransceivers()) {
@@ -832,7 +862,8 @@ async function joinConferenceWebRTC(room){
     catch(e2){ alert('无法打开麦克风/摄像头：' + e2.message); return; }
   }
   confLocalStream = stream;
-  const pc = new RTCPeerConnection({iceServers: []});
+  await ensureWebRTCConfig();
+  const pc = new RTCPeerConnection({iceServers: webrtcIceServers});
   confPC = pc;
   const remote = new MediaStream();
   const video = $('conf-webrtc-video'), audio = $('conf-webrtc-audio');
@@ -1217,7 +1248,8 @@ async function startWebPaging(){
   try{
     pageStream = await navigator.mediaDevices.getUserMedia({audio:true});
   }catch(e){ $('page-msg').textContent = '无法打开麦克风：' + e.message; return; }
-  const pc = new RTCPeerConnection({iceServers: []});
+  await ensureWebRTCConfig();
+  const pc = new RTCPeerConnection({iceServers: webrtcIceServers});
   pagePC = pc;
   const track = pageStream.getAudioTracks()[0];
   pc.addTransceiver(track, {direction:'sendonly'});
@@ -1452,7 +1484,8 @@ function waitICE(pc){
 
 async function startVideo(callId, talkback = false){
   closeVideo();
-  const pc = new RTCPeerConnection({iceServers: []});
+  await ensureWebRTCConfig();
+  const pc = new RTCPeerConnection({iceServers: webrtcIceServers});
   viewerPC = pc;
   pc.addTransceiver('video', {direction: 'recvonly'});
   if(talkback){
@@ -1620,6 +1653,7 @@ function startApp(){
   loadMedia();
   loadSchedules();
   loadServerSettings();
+  loadWebRTCConfig();
   loadTTSConfig();
   if(currentRole === 'admin'){ loadUsers(); loadLicense(); }
   loadSystemInfo();
@@ -1947,6 +1981,11 @@ async function loadServerSettings(){
     $('settings-https-cert').value = p.https_cert || '';
     $('settings-https-key').value = p.https_key || '';
     $('settings-srtp-mode').value = p.srtp_mode || 'auto';
+    $('settings-stun-urls').value = (p.stun_urls || []).join(', ');
+    $('settings-turn-urls').value = (p.turn_urls || []).join(', ');
+    $('settings-turn-user').value = p.turn_username || '';
+    $('settings-turn-pass').value = '';
+    $('settings-webrtc-public-ip').value = p.webrtc_public_ip || '';
     $('settings-domain').value = p.domain || '';
     $('settings-alarm').value = p.alarm_number || '';
     $('settings-auto-answer').value = p.auto_answer || '';
@@ -1958,7 +1997,7 @@ async function loadServerSettings(){
     $('settings-state').textContent = d.restart_required ? '有未应用修改' : '已生效';
     $('settings-msg').textContent = '';
     const a = d.active || {};
-    $('settings-active').textContent = 'advertise=' + (a.advertise || '—') + '  http=' + (a.http || '—') + '  sip=' + (a.sip_udp || '—') + '  sip_tls=' + (a.sip_tls || 'off') + '  https=' + (a.https || 'off') + '  srtp=' + (a.srtp_mode || 'auto') + '  heartbeat=' + (a.heartbeat_enabled ? 'on' : 'off');
+    $('settings-active').textContent = 'advertise=' + (a.advertise || '—') + '  http=' + (a.http || '—') + '  sip=' + (a.sip_udp || '—') + '  sip_tls=' + (a.sip_tls || 'off') + '  https=' + (a.https || 'off') + '  srtp=' + (a.srtp_mode || 'auto') + '  stun=' + ((a.stun_urls || []).length ? 'on' : 'off') + '  turn=' + ((a.turn_urls || []).length ? 'on' : 'off') + '  heartbeat=' + (a.heartbeat_enabled ? 'on' : 'off');
   }catch(e){ $('settings-msg').textContent = '读取失败：' + e.message; }
 }
 
@@ -1979,6 +2018,11 @@ async function saveServerSettings(){
     https_cert: $('settings-https-cert').value.trim(),
     https_key: $('settings-https-key').value.trim(),
     srtp_mode: $('settings-srtp-mode').value,
+    stun_urls: $('settings-stun-urls').value.split(/[\s,]+/).filter(Boolean),
+    turn_urls: $('settings-turn-urls').value.split(/[\s,]+/).filter(Boolean),
+    turn_username: $('settings-turn-user').value.trim(),
+    turn_password: $('settings-turn-pass').value || (serverSettings && (serverSettings.pending || serverSettings.active) || {}).turn_password || '',
+    webrtc_public_ip: $('settings-webrtc-public-ip').value.trim(),
     domain: $('settings-domain').value.trim(),
     alarm_number: $('settings-alarm').value.trim(),
     auto_answer: $('settings-auto-answer').value.trim(),

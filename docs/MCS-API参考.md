@@ -1,6 +1,6 @@
 # MCS API 参考（当前实现）
 
-> 适用版本：`0.12.0` 当前代码。
+> 适用版本：`0.13.0` 当前代码。
 > 文中只列 **已经实现** 的接口；规划中的接口见 [MCS-接口与数据模型.md](MCS-接口与数据模型.md)，不要直接对接规划稿。
 > 机器可读版本：[openapi.yaml](openapi.yaml)。
 
@@ -267,7 +267,12 @@ operator/admin 可操作，viewer 只读。
   "https": "0.0.0.0:8443",
   "https_cert": "",
   "https_key": "",
-  "srtp_mode": "auto"
+  "srtp_mode": "auto",
+  "stun_urls": ["stun:stun.example.com:3478"],
+  "turn_urls": ["turn:turn.example.com:3478?transport=udp"],
+  "turn_username": "mcs",
+  "turn_password": "secret",
+  "webrtc_public_ip": "203.0.113.10"
 }
 ```
 
@@ -540,6 +545,23 @@ Alarm 字段：
 
 ## 9. WebRTC 音视频
 
+### GET `/api/v1/webrtc/config`
+
+返回浏览器使用的 ICE 配置：
+
+```json
+{
+  "ice_servers": [
+    {"urls":["stun:stun.example.com:3478"]},
+    {"urls":["turn:turn.example.com:3478?transport=udp"],
+     "username":"mcs","credential":"secret"}
+  ],
+  "public_ip":"203.0.113.10"
+}
+```
+
+TURN 密码会下发给登录后的浏览器，请使用专用 TURN 账号。
+
 ### POST `/api/v1/webrtc/offer`
 
 浏览器 `RTCPeerConnection` 的 offer：
@@ -555,8 +577,8 @@ Alarm 字段：
 ```
 
 - 只对带视频的活动呼叫有效；
-- 音频为 sendrecv（浏览器麦克风对讲），视频为 recvonly；
-- 无 TURN，跨 NAT 可能失败。
+- 默认视频/音频均为 recvonly（只看/听，不打开麦克风）；`talkback:true` 且为门口机通话时才启用浏览器麦克风；
+- STUN/TURN 由系统设置配置，通过 `GET /api/v1/webrtc/config` 下发给浏览器；未配置时跨 NAT 可能失败。
 
 浏览器端还需要：
 
@@ -627,6 +649,6 @@ curl -b /tmp/mcs.cookie -X POST http://127.0.0.1:8080/api/v1/alarms/alm-xxx/clos
 
 ## 13. 未实现（不要对接）
 
-以下仅在规划稿中：分页/筛选、设备模板、CSV 导入导出、远程重启、批量升级、角色/RBAC、审计查询、录像下载、ONVIF/RTSP、消防联动、TURN。
+以下仅在规划稿中：分页/筛选、设备模板、CSV 导入导出、远程重启、批量升级、审计查询、录像下载、ONVIF/RTSP、消防联动、内置 TURN 服务。
 
 实现状态以本文件与 [使用手册](MCS-使用手册.md) 为准。

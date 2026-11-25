@@ -167,7 +167,7 @@ ss -ltnp | grep -E '18080|18443'
 5. 点“开锁”，门口机收到 DTMF 并动作；
 6. 点“抓拍”，打开设备快照图片。
 
-**注意**：WebRTC 视频窗需要 HTTPS 或 localhost；跨 NAT 没有 TURN，先在同一 LAN 测。
+**注意**：WebRTC 视频窗需要 HTTPS 或 localhost；跨 NAT 需要先在系统设置配置 STUN/TURN，再测试。
 
 ### 5.7 TLS / SRTP
 
@@ -280,7 +280,7 @@ curl -s http://192.168.68.106:18080/api/v1/alarms
 | 只有单向音频 | NAT/防火墙、SDP `c=`、终端编码 |
 | 广播无声音 | 音箱是否自动应答、Alert-Info、分区成员、TTS 8399 |
 | 视频黑屏 | H.264、`m=video`、WebRTC HTTPS、浏览器编码支持 |
-| WebRTC 连不上 | 同 LAN、无 TURN、HTTPS/证书、ICE 端口 |
+| WebRTC 连不上 | STUN/TURN 配置、HTTPS/证书、ICE 端口、公网 IP |
 | 开锁无反应 | DTMF 码、INFO Content-Type、设备型号 |
 | 抓拍 404/502 | 设备 `snapshot` URL、设备网络可达 |
 | 重启后设备消失 | 设备需重新注册；数据库只存配置，不存在线状态 |

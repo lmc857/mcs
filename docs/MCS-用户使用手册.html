@@ -50,7 +50,7 @@ body { margin:0; color:var(--ink); font-family:"PingFang SC","Microsoft YaHei","
   <div class="kicker">报警 · 对讲 · 广播融合通信服务器</div>
   <h1>MCS 用户<br>使用手册</h1>
   <div class="rule"></div>
-  <div class="meta">适用版本：MCS 0.12.0<br>文档版本：2026-11-23<br>适用对象：值班人员、操作员、系统管理员</div>
+  <div class="meta">适用版本：MCS 0.13.0<br>文档版本：2026-11-23<br>适用对象：值班人员、操作员、系统管理员</div>
   <div class="foot">覆盖设备、报警、对讲、广播、寻呼、会议、系统设置与运维。<br>请结合实际网络、分区和设备配置使用。</div>
 </section>
 <nav class="toc">
@@ -385,7 +385,33 @@ a=crypto:1 AES_CM_128_HMAC_SHA1_80 inline:...
 <li>广播、寻呼、会议仍使用明文 RTP；</li>
 <li>SDES 密钥在 SDP 中，生产环境应同时启用 SIP TLS。</li>
 </ul>
-<h3>5.5 在线与租期</h3>
+<h3>5.5 ICE / STUN / TURN</h3>
+<p>默认 WebRTC 只使用 host candidate，适合同一局域网。</p>
+<p>需要跨网段/公网时，在“系统设置”配置：</p>
+<ul>
+<li>STUN 地址；</li>
+<li>TURN 地址；</li>
+<li>TURN 用户名/密码；</li>
+<li>WebRTC 公网 IP（可选）。</li>
+</ul>
+<p><img src="images/console-ice.png" alt="ICE 设置"></p>
+<p>示例：</p>
+<pre><code class="language-text">STUN：stun:stun.example.com:3478
+TURN：turn:turn.example.com:3478?transport=udp
+TURN 用户名：mcs
+TURN 密码：******
+</code></pre>
+<p>说明：</p>
+<ul>
+<li>STUN/TURN 使用标准服务，不需要在 MCS 里单独开发；</li>
+<li>推荐部署 coturn，TURN 同时提供 STUN；</li>
+<li>MCS 和浏览器都需要能访问 TURN；</li>
+<li>TURN 需要公网 IP、3478 UDP/TCP 和中继端口范围；</li>
+<li>公网 IP 字段用于服务器在 NAT 后时发布 host candidate；</li>
+<li>TURN 密码会下发给登录后的浏览器，建议使用专用账号。</li>
+</ul>
+<p>SIP 话机侧仍不使用 ICE/STUN/TURN，只走 RTP 中继和地址锁存。</p>
+<h3>5.6 在线与租期</h3>
 <p>MCS 按注册租期判断在线：</p>
 <ul>
 <li>默认租期 300 秒；</li>
@@ -394,7 +420,7 @@ a=crypto:1 AES_CM_128_HMAC_SHA1_80 inline:...
 <li>可启用 SIP OPTIONS 心跳加快离线检测。</li>
 </ul>
 <p>心跳配置在“系统设置”，默认关闭。</p>
-<h3>5.6 删除设备</h3>
+<h3>5.7 删除设备</h3>
 <p>在设备列表点击“删除”。</p>
 <p>删除后：</p>
 <ul>
@@ -808,7 +834,7 @@ MCS 按报警级别依次呼叫值班目标
 <li>没有主持人角色；</li>
 <li>没有多画面；</li>
 <li>不支持 Opus/SRTP 会议；</li>
-<li>WebRTC 跨 NAT 需要 STUN/TURN，当前未内置。</li>
+<li>WebRTC 跨 NAT 需要 STUN/TURN；可在系统设置配置外部 STUN/TURN。</li>
 </ul>
 <hr>
 <h2>10. 系统配置</h2>
@@ -1170,7 +1196,7 @@ MCS 按报警级别依次呼叫值班目标
 <li>只支持 H264；</li>
 <li>不转码；</li>
 <li>不支持 SRTP 会议视频；</li>
-<li>WebRTC 跨公网需要 STUN/TURN。</li>
+<li>WebRTC 跨公网需要配置 STUN/TURN。</li>
 </ul>
 <h3>18.3 广播/寻呼限制</h3>
 <ul>

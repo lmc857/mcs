@@ -113,6 +113,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/v1/conference/{room}/participants/{id}/kick", s.conferenceKick)
 	mux.HandleFunc("POST /api/v1/conference/{room}/participants/{id}/mute", s.conferenceMute)
 	mux.HandleFunc("POST /api/v1/intercom/{call_id}/unlock", s.intercomUnlock)
+	mux.HandleFunc("GET /api/v1/webrtc/config", s.webrtcConfig)
 	mux.HandleFunc("POST /api/v1/webrtc/offer", s.webrtcOffer)
 	mux.HandleFunc("GET /api/v1/devices/{ext}/snapshot", s.deviceSnapshot)
 	mux.HandleFunc("GET /api/v1/ws", s.ws)
@@ -245,6 +246,20 @@ func (s *Server) deviceDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, 200, map[string]any{"status": "deleted"})
+}
+
+func (s *Server) webrtcConfig(w http.ResponseWriter, r *http.Request) {
+	servers := make([]map[string]any, 0, 4)
+	if len(s.activeSettings.STUNURLs) > 0 {
+		servers = append(servers, map[string]any{"urls": s.activeSettings.STUNURLs})
+	}
+	if len(s.activeSettings.TURNURLs) > 0 {
+		servers = append(servers, map[string]any{
+			"urls": s.activeSettings.TURNURLs, "username": s.activeSettings.TURNUsername,
+			"credential": s.activeSettings.TURNPassword,
+		})
+	}
+	writeJSON(w, 200, map[string]any{"ice_servers": servers, "public_ip": s.activeSettings.WebRTCPublicIP})
 }
 
 func (s *Server) webrtcOffer(w http.ResponseWriter, r *http.Request) {
@@ -759,7 +774,7 @@ func (s *Server) systemSettingsSave(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 400, map[string]any{"code": "VALIDATION_FAILED", "message": "invalid json"})
 		return
 	}
-	v.Version = 2
+	v.Version = 3
 	if err := config.ValidateServerSettings(v); err != nil {
 		writeJSON(w, 400, map[string]any{"code": "VALIDATION_FAILED", "message": err.Error()})
 		return

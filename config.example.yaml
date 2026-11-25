@@ -117,6 +117,15 @@ zones:
     mode: "multicast"
     multicast: "239.255.10.1:5004"
 
+# WebRTC ICE：外部 STUN/TURN；也可全部在网页“系统设置”中修改
+# webrtc:
+#   ice_servers:
+#     - urls: ["stun:stun.example.com:3478"]
+#     - urls: ["turn:turn.example.com:3478?transport=udp"]
+#       username: "mcs"
+#       credential: "secret"
+#   public_ip: "203.0.113.10"
+
 # 设备仅在数据库 devices 表为空时从本文件导入；之后以 Web 控制台/SQLite 为准
 devices:
   - ext: "1001"

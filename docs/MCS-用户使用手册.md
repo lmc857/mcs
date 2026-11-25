@@ -1,6 +1,6 @@
 # MCS 用户使用手册
 
-**适用版本：MCS 0.12.0**  
+**适用版本：MCS 0.13.0**  
 **文档版本：2026-11-23**
 
 ---
@@ -267,7 +267,40 @@ a=crypto:1 AES_CM_128_HMAC_SHA1_80 inline:...
 - 广播、寻呼、会议仍使用明文 RTP；
 - SDES 密钥在 SDP 中，生产环境应同时启用 SIP TLS。
 
-### 5.5 在线与租期
+### 5.5 ICE / STUN / TURN
+
+默认 WebRTC 只使用 host candidate，适合同一局域网。
+
+需要跨网段/公网时，在“系统设置”配置：
+
+- STUN 地址；
+- TURN 地址；
+- TURN 用户名/密码；
+- WebRTC 公网 IP（可选）。
+
+![ICE 设置](images/console-ice.png)
+
+示例：
+
+```text
+STUN：stun:stun.example.com:3478
+TURN：turn:turn.example.com:3478?transport=udp
+TURN 用户名：mcs
+TURN 密码：******
+```
+
+说明：
+
+- STUN/TURN 使用标准服务，不需要在 MCS 里单独开发；
+- 推荐部署 coturn，TURN 同时提供 STUN；
+- MCS 和浏览器都需要能访问 TURN；
+- TURN 需要公网 IP、3478 UDP/TCP 和中继端口范围；
+- 公网 IP 字段用于服务器在 NAT 后时发布 host candidate；
+- TURN 密码会下发给登录后的浏览器，建议使用专用账号。
+
+SIP 话机侧仍不使用 ICE/STUN/TURN，只走 RTP 中继和地址锁存。
+
+### 5.6 在线与租期
 
 MCS 按注册租期判断在线：
 
@@ -278,7 +311,7 @@ MCS 按注册租期判断在线：
 
 心跳配置在“系统设置”，默认关闭。
 
-### 5.6 删除设备
+### 5.7 删除设备
 
 在设备列表点击“删除”。
 
@@ -732,7 +765,7 @@ TTS 服务在：
 - 没有主持人角色；
 - 没有多画面；
 - 不支持 Opus/SRTP 会议；
-- WebRTC 跨 NAT 需要 STUN/TURN，当前未内置。
+- WebRTC 跨 NAT 需要 STUN/TURN；可在系统设置配置外部 STUN/TURN。
 
 ---
 
@@ -1164,7 +1197,7 @@ MCS 面向报警、对讲、广播垂直场景，不是通用企业 PBX。
 - 只支持 H264；
 - 不转码；
 - 不支持 SRTP 会议视频；
-- WebRTC 跨公网需要 STUN/TURN。
+- WebRTC 跨公网需要配置 STUN/TURN。
 
 ### 18.3 广播/寻呼限制
 

@@ -136,7 +136,7 @@ viewer 只读；operator/admin 可静音、取消静音、踢人；房间创建�
 - 浏览器必须支持 WebRTC H264 和 PCMU/PCMA；
 - 网页音视频需要 **HTTPS**，或在本机使用 `http://127.0.0.1` / `http://localhost`；
 - 局域网其他电脑用 `http://192.168.x.x:8080` 打开时，浏览器会禁止麦克风/摄像头；
-- 当前没有 STUN/TURN 配置，跨 NAT/公网场景不保证连通。
+- 跨 NAT/公网可在系统设置配置 STUN/TURN；未配置时只有 host candidate。
 
 API：
 

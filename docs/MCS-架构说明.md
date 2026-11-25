@@ -7,7 +7,7 @@
 | 项目 | 内容 |
 | --- | --- |
 | 文档版本 | v1.0 |
-| 对应代码 | `0.12.0`（2026-11） |
+| 对应代码 | `0.13.0`（2026-11） |
 | 读者 | 后端研发、终端/平台集成、部署运维 |
 | 关联文档 | [README](../README.md) · [技术方案](MCS-技术方案.md) · [API 参考](MCS-API参考.md) · [配置参考](MCS-配置参考.md) · [部署手册](../deploy/README.md) |
 
@@ -123,7 +123,7 @@ MCS 是一套面向报警运营、园区、校园、医院、工地等场景的*
 | 控制台 HTTP | `127.0.0.1:8080` | HTTP | 默认只绑本机；生产可改 `0.0.0.0` 或放反向代理后 |
 | 控制台 HTTPS | 空（可配 `0.0.0.0:8443`） | HTTPS | 可选，TLS 1.2+；证书为空时复用 SIP TLS 证书 |
 | RTP / RTCP | 动态高位 UDP | UDP | 每个 RTP relay 一个 UDP socket（音频/视频各一对），每个广播会话一个；**没有固定端口段** |
-| WebRTC | 动态 UDP | ICE / DTLS / SRTP | 仅 host candidate，未配置 STUN/TURN |
+| WebRTC | 动态 UDP | ICE / DTLS / SRTP | 支持可配置 STUN/TURN、公网 IP 映射；未配置时仅 host |
 | 出站 HTTP | — | HTTP/HTTPS | TTS 合成、设备抓拍 |
 
 > **防火墙提示**：因为 RTP 端口是动态的，Linux 防火墙需要放行高位 UDP；Windows 安装脚本会给
@@ -896,7 +896,8 @@ starting ── invite 全部终端（并发，默认上限 16）──┐
 约束：
 
 - 只对**已接听且协商了视频**的通话开放；纯音频通话返回错误。
-- Pion 使用空 `Configuration{}`，没有 STUN/TURN，只有 host candidate；适合同一局域网/本机。
+- Pion 从 `webrtc.ice_servers` / 网页系统设置读取 STUN/TURN，并通过 `/api/v1/webrtc/config` 下发给浏览器；
+- 未配置 STUN/TURN 时只有 host candidate；跨公网需要配置 TURN。
 - 浏览器页面必须运行在 `https://` 或 `localhost` 才能使用麦克风。
 - 视频固定为 H.264（`packetization-mode=1`）；音频固定为 PCMU/PCMA，避免 Opus 转码。
 - 浏览器视频是**只收**；音频是双向。
@@ -1262,7 +1263,7 @@ Linux 单元做了基本加固：`NoNewPrivileges`、`ProtectSystem=strict`、`P
 | SRTP | 终端侧启用 `RTP/SAVP` + `a=crypto`；MCS 自动协商，无需额外开关 |
 | WebRTC | 需要 HTTPS 或 `localhost` 才能用麦克风；Pion 自动 DTLS-SRTP |
 
-0.12.0 起：
+0.13.0 起：
 - B 腿会保留注册 Contact/REGISTER transport 的 `transport=tls`，出站 INVITE 使用 TLS；
 - `tls_ca` 用于信任终端私有 CA，`tls_insecure` 仅用于内网自签测试；
 - 网页可配置 `srtp_mode`：`auto` / `required` / `off`；
@@ -1322,12 +1323,12 @@ Linux 单元做了基本加固：`NoNewPrivileges`、`ProtectSystem=strict`、`P
 | SIP 呼叫鉴权 | INVITE/BYE/CANCEL 不做 Digest | 内网可信部署；公网必须加 SBC/ACL，后续补鉴权 |
 | 注册持久化 | 注册状态只在内存 | 重启后终端需重新注册；可考虑持久化/快速重注册 |
 | RTP 端口 | 动态端口，无固定段 | 防火墙难收敛；后续加可配置端口池 |
-| NAT/公网 | 无 ICE/TURN/STUN（SIP），WebRTC 也只有 host candidate | 跨公网/复杂 NAT 不可用；需 TURN 和媒体公网地址 |
+| NAT/公网 | SIP 无 ICE/TURN/STUN；WebRTC 可配置 STUN/TURN 和公网 IP | SIP 跨公网仍依赖端口映射；WebRTC 需 TURN |
 | 编码 | G.711 为基线，可选 A/U 转码；无 G.722/G.729；SIP Opus 不转码 | 混合厂商可能单通；广播 Opus 仅终端方向 |
 | SRTP | 仅 SDES；SIP 终端无 DTLS-SRTP | 需要 DTLS-SRTP 的终端无法接入；广播/寻呼明文 |
 | 报警策略 | 顺序升级、无排班/并行同振/Webhook | 值班体验有限；后续做策略引擎 |
 | 广播 | 组播未真机验证；无 RTCP/重传/逐终端重试 | 现场需验证交换机与音箱；失败终端只记录 |
-| 对讲 | 浏览器视频只收；无 TURN、无视频录像、无视频回传 | 远程调度受限；后续补 TURN/录像 |
+| 对讲 | 浏览器视频只收；支持 STUN/TURN；无视频录像/回传 | 远程调度需 TURN；视频录像仍待补 |
 | 容量 | 无压测/硬上限；SQLite 单写者 | 大并发需评估；后续加指标和容量测试 |
 | 运维 | 无 metrics/tracing/pprof/pcap/诊断包 | 排障靠日志；后续补可观测性 |
 | 数据保留 | 话单/报警/录音无自动清理 | 磁盘会增长；后续加保留策略 |
@@ -1347,7 +1348,7 @@ Linux 单元做了基本加固：`NoNewPrivileges`、`ProtectSystem=strict`、`P
 | 多用户/RBAC/审计/封禁 | 单管理员 + 内存会话 |
 | Prometheus、pprof、pcap、诊断包 | 未实现 |
 | 报警并行同振/排班/Webhook | 顺序升级，无并行/排班/Webhook |
-| 视频录像/回传/TURN | 未实现；浏览器只收视频 |
+| 视频录像/回传 | 未实现；浏览器只收视频 |
 | 设备型号模板/自动配置 | 未实现；设备字段由控制台/配置维护 |
 
 > 这些差异不是“文档错误”，而是 M1 范围收敛的结果。规划稿保留为后续路线图。
@@ -1357,7 +1358,7 @@ Linux 单元做了基本加固：`NoNewPrivileges`、`ProtectSystem=strict`、`P
 1. **呼叫鉴权与网络边界**：INVITE/BYE 的 Digest 或 ACL、控制台 HTTPS、默认密码治理。
 2. **可运维性**：Prometheus 指标、结构化日志、pprof、固定 RTP 端口段、诊断包。
 3. **报警策略**：并行同振、值班表/节假日、Webhook/短信、可视化管理。
-4. **媒体能力**：DTLS-SRTP、G.722/Opus 策略、TURN、视频录像/回传。
+4. **媒体能力**：G.722/Opus 策略、视频录像/回传、内置 TURN 服务（当前使用外部 coturn）。
 5. **多用户与审计**：RBAC、登录失败锁定、操作审计、配置加密。
 6. **容量与高可用**：压测基线、SQLite 写入优化、主备/集群（若业务需要）。
 7. **代码结构**：当 `sipserver` 继续增长时，按 call/media/broadcast 拆包，保持当前门面接口。

@@ -1,6 +1,6 @@
 # MCS 测试与兼容性
 
-> 当前代码 `0.12.0`。本文记录自动化测试覆盖、已验证环境与已知兼容边界，不是第三方认证报告。
+> 当前代码 `0.13.0`。本文记录自动化测试覆盖、已验证环境与已知兼容边界，不是第三方认证报告。
 
 ## 1. 自动化测试
 
@@ -28,6 +28,7 @@ go test -race ./internal/sipserver ./internal/api ./internal/store ./internal/tt
 | `sdp_test.go` | 音视频 SDP 端口/连接地址改写 |
 | `schedule_test.go` | cron 解析、到期推进、JSON 持久化 |
 | `real_tts_test.go` | `MCS_REAL_TTS=1` 时调用真实 Kokoro |
+| `internal/config/settings_test.go` | 服务器设置、TLS/SRTP、STUN/TURN URL/凭据/公网 IP 校验 |
 | `internal/store/sqlite_test.go` | CDR/报警/设备写库、重启恢复、schema 幂等 |
 | `internal/api/server_test.go` | WebSocket 报警、登录/Cookie、设备 CRUD、抓拍代理 |
 | `internal/tts/client_test.go` | OpenAI 兼容认证/模型、MiniMax hex 音频、缓存、错误响应 |
@@ -67,7 +68,8 @@ go test -race ./internal/sipserver ./internal/api ./internal/store ./internal/tt
 - 组播：代码支持，但未在真实交换机/音箱上验证。
 - 固定 RTP 端口段：未实现，RTP 使用动态端口；云安全组需放行 UDP 高位端口。
 - Windows 安装：原生 SCM 服务已支持；真实 Windows 主机仍需现场验证。
-- 浏览器视频回传/TURN/视频录像：未实现。
+- 浏览器视频回传/视频录像：未实现。
+- STUN/TURN 使用外部标准服务；MCS 不内置 TURN 服务。
 - 单管理员、无 RBAC/登录失败锁定/操作审计。
 
 ## 5. 升级前检查

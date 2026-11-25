@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"net"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -10,27 +11,32 @@ import (
 // ServerSettings are the allowlisted fields that can be edited from the
 // web console. They are persisted in SQLite and applied on process start.
 type ServerSettings struct {
-	Version            int    `json:"settings_version,omitempty"`
-	Advertise          string `json:"advertise"`
-	SIPUDP             string `json:"sip_udp"`
-	HTTP               string `json:"http"`
-	HTTPS              string `json:"https"`
-	SIPTLS             string `json:"sip_tls"`
-	TLSCert            string `json:"tls_cert"`
-	TLSKey             string `json:"tls_key"`
-	TLSCA              string `json:"tls_ca"`
-	TLSInsecure        bool   `json:"tls_insecure"`
-	HTTPSCert          string `json:"https_cert"`
-	HTTPSKey           string `json:"https_key"`
-	SRTPMode           string `json:"srtp_mode"`
-	Domain             string `json:"domain"`
-	AlarmNumber        string `json:"alarm_number"`
-	AutoAnswer         string `json:"auto_answer"`
-	Transcode          bool   `json:"transcode"`
-	HeartbeatEnabled   bool   `json:"heartbeat_enabled"`
-	HeartbeatIntervalS int    `json:"heartbeat_interval_s"`
-	HeartbeatTimeoutS  int    `json:"heartbeat_timeout_s"`
-	HeartbeatFailures  int    `json:"heartbeat_failures"`
+	Version            int      `json:"settings_version,omitempty"`
+	Advertise          string   `json:"advertise"`
+	SIPUDP             string   `json:"sip_udp"`
+	HTTP               string   `json:"http"`
+	HTTPS              string   `json:"https"`
+	SIPTLS             string   `json:"sip_tls"`
+	TLSCert            string   `json:"tls_cert"`
+	TLSKey             string   `json:"tls_key"`
+	TLSCA              string   `json:"tls_ca"`
+	TLSInsecure        bool     `json:"tls_insecure"`
+	HTTPSCert          string   `json:"https_cert"`
+	HTTPSKey           string   `json:"https_key"`
+	SRTPMode           string   `json:"srtp_mode"`
+	STUNURLs           []string `json:"stun_urls"`
+	TURNURLs           []string `json:"turn_urls"`
+	TURNUsername       string   `json:"turn_username"`
+	TURNPassword       string   `json:"turn_password"`
+	WebRTCPublicIP     string   `json:"webrtc_public_ip"`
+	Domain             string   `json:"domain"`
+	AlarmNumber        string   `json:"alarm_number"`
+	AutoAnswer         string   `json:"auto_answer"`
+	Transcode          bool     `json:"transcode"`
+	HeartbeatEnabled   bool     `json:"heartbeat_enabled"`
+	HeartbeatIntervalS int      `json:"heartbeat_interval_s"`
+	HeartbeatTimeoutS  int      `json:"heartbeat_timeout_s"`
+	HeartbeatFailures  int      `json:"heartbeat_failures"`
 }
 
 func (c Config) ServerSettings() ServerSettings {
@@ -38,24 +44,43 @@ func (c Config) ServerSettings() ServerSettings {
 	if srtpMode == "" {
 		srtpMode = "auto"
 	}
+	var stunURLs, turnURLs []string
+	turnUser, turnPass := "", ""
+	for _, srv := range c.WebRTC.ICEServers {
+		for _, u := range srv.URLs {
+			if strings.HasPrefix(strings.ToLower(u), "turn:") || strings.HasPrefix(strings.ToLower(u), "turns:") {
+				turnURLs = append(turnURLs, u)
+				if turnUser == "" {
+					turnUser, turnPass = srv.Username, srv.Credential
+				}
+			} else {
+				stunURLs = append(stunURLs, u)
+			}
+		}
+	}
 	return ServerSettings{
-		Version:     2,
-		Advertise:   c.Server.Advertise,
-		SIPUDP:      c.Server.SIPUDP,
-		HTTP:        c.Server.HTTP,
-		HTTPS:       c.Server.HTTPS,
-		SIPTLS:      c.Server.SIPTLS,
-		TLSCert:     c.Server.TLSCert,
-		TLSKey:      c.Server.TLSKey,
-		TLSCA:       c.Server.TLSCA,
-		TLSInsecure: c.Server.TLSInsecure,
-		HTTPSCert:   c.Server.HTTPSCert,
-		HTTPSKey:    c.Server.HTTPSKey,
-		SRTPMode:    srtpMode,
-		Domain:      c.Server.Domain,
-		AlarmNumber: c.Alarm.Number,
-		AutoAnswer:  c.Broadcast.AutoAnswer,
-		Transcode:   c.Media.Transcode,
+		Version:        3,
+		Advertise:      c.Server.Advertise,
+		SIPUDP:         c.Server.SIPUDP,
+		HTTP:           c.Server.HTTP,
+		HTTPS:          c.Server.HTTPS,
+		SIPTLS:         c.Server.SIPTLS,
+		TLSCert:        c.Server.TLSCert,
+		TLSKey:         c.Server.TLSKey,
+		TLSCA:          c.Server.TLSCA,
+		TLSInsecure:    c.Server.TLSInsecure,
+		HTTPSCert:      c.Server.HTTPSCert,
+		HTTPSKey:       c.Server.HTTPSKey,
+		SRTPMode:       srtpMode,
+		STUNURLs:       stunURLs,
+		TURNURLs:       turnURLs,
+		TURNUsername:   turnUser,
+		TURNPassword:   turnPass,
+		WebRTCPublicIP: c.WebRTC.PublicIP,
+		Domain:         c.Server.Domain,
+		AlarmNumber:    c.Alarm.Number,
+		AutoAnswer:     c.Broadcast.AutoAnswer,
+		Transcode:      c.Media.Transcode,
 	}
 }
 
@@ -79,6 +104,26 @@ func (c *Config) ApplyServerSettings(v ServerSettings) error {
 	c.Server.HTTPSKey = v.HTTPSKey
 	c.Server.SRTPMode = v.SRTPMode
 	c.Server.Domain = v.Domain
+	c.WebRTC = WebRTCConfig{PublicIP: strings.TrimSpace(v.WebRTCPublicIP)}
+	for _, u := range v.STUNURLs {
+		u = strings.TrimSpace(u)
+		if u != "" {
+			c.WebRTC.ICEServers = append(c.WebRTC.ICEServers, ICEServerConfig{URLs: []string{u}})
+		}
+	}
+	if len(v.TURNURLs) > 0 {
+		urls := make([]string, 0, len(v.TURNURLs))
+		for _, u := range v.TURNURLs {
+			if u = strings.TrimSpace(u); u != "" {
+				urls = append(urls, u)
+			}
+		}
+		if len(urls) > 0 {
+			c.WebRTC.ICEServers = append(c.WebRTC.ICEServers, ICEServerConfig{
+				URLs: urls, Username: v.TURNUsername, Credential: v.TURNPassword,
+			})
+		}
+	}
 	c.Alarm.Number = v.AlarmNumber
 	c.Broadcast.AutoAnswer = v.AutoAnswer
 	c.Media.Transcode = v.Transcode
@@ -89,7 +134,23 @@ func (c *Config) ApplyServerSettings(v ServerSettings) error {
 	return nil
 }
 
-func (v ServerSettings) Equal(w ServerSettings) bool { return v == w }
+func (v ServerSettings) Equal(w ServerSettings) bool {
+	v.STUNURLs = append([]string(nil), v.STUNURLs...)
+	w.STUNURLs = append([]string(nil), w.STUNURLs...)
+	v.TURNURLs = append([]string(nil), v.TURNURLs...)
+	w.TURNURLs = append([]string(nil), w.TURNURLs...)
+	return v.Version == w.Version &&
+		v.Advertise == w.Advertise && v.SIPUDP == w.SIPUDP && v.HTTP == w.HTTP &&
+		v.HTTPS == w.HTTPS && v.SIPTLS == w.SIPTLS && v.TLSCert == w.TLSCert &&
+		v.TLSKey == w.TLSKey && v.TLSCA == w.TLSCA && v.TLSInsecure == w.TLSInsecure &&
+		v.HTTPSCert == w.HTTPSCert && v.HTTPSKey == w.HTTPSKey && v.SRTPMode == w.SRTPMode &&
+		v.Domain == w.Domain && v.AlarmNumber == w.AlarmNumber && v.AutoAnswer == w.AutoAnswer &&
+		v.Transcode == w.Transcode && v.HeartbeatEnabled == w.HeartbeatEnabled &&
+		v.HeartbeatIntervalS == w.HeartbeatIntervalS && v.HeartbeatTimeoutS == w.HeartbeatTimeoutS &&
+		v.HeartbeatFailures == w.HeartbeatFailures && slices.Equal(v.STUNURLs, w.STUNURLs) &&
+		slices.Equal(v.TURNURLs, w.TURNURLs) && v.TURNUsername == w.TURNUsername &&
+		v.TURNPassword == w.TURNPassword && v.WebRTCPublicIP == w.WebRTCPublicIP
+}
 
 func ValidateServerSettings(v ServerSettings) error {
 	if err := validateHostPort("advertise", v.Advertise, false, true); err != nil {
@@ -122,6 +183,18 @@ func ValidateServerSettings(v ServerSettings) error {
 		if v.HTTPSCert == "" || v.HTTPSKey == "" {
 			return fmt.Errorf("HTTPS 证书和私钥必须同时填写")
 		}
+	}
+	if err := validateICEURLs("stun_urls", v.STUNURLs, "stun:"); err != nil {
+		return err
+	}
+	if err := validateICEURLs("turn_urls", v.TURNURLs, "turn:", "turns:"); err != nil {
+		return err
+	}
+	if len(v.TURNURLs) > 0 && (strings.TrimSpace(v.TURNUsername) == "" || v.TURNPassword == "") {
+		return fmt.Errorf("配置 TURN 时必须填写用户名和密码")
+	}
+	if v.WebRTCPublicIP != "" && net.ParseIP(strings.TrimSpace(v.WebRTCPublicIP)) == nil {
+		return fmt.Errorf("webrtc_public_ip 不是合法 IP")
 	}
 	if strings.TrimSpace(v.Domain) == "" {
 		return fmt.Errorf("domain 不能为空")
@@ -174,6 +247,33 @@ func validateHostPort(name, value string, allowEmpty, allowHostname bool) error 
 	n, err := strconv.Atoi(port)
 	if err != nil || n < 1 || n > 65535 {
 		return fmt.Errorf("%s 的端口必须在 1-65535", name)
+	}
+	return nil
+}
+
+func validateICEURLs(name string, urls []string, prefixes ...string) error {
+	if len(urls) > 8 {
+		return fmt.Errorf("%s 最多 8 个地址", name)
+	}
+	for _, raw := range urls {
+		u := strings.TrimSpace(raw)
+		if u == "" {
+			return fmt.Errorf("%s 不能包含空地址", name)
+		}
+		lower := strings.ToLower(u)
+		ok := false
+		for _, p := range prefixes {
+			if strings.HasPrefix(lower, p) {
+				ok = true
+				break
+			}
+		}
+		if !ok {
+			return fmt.Errorf("%s 地址格式无效: %s", name, raw)
+		}
+		if strings.ContainsAny(u, " \t\r\n") {
+			return fmt.Errorf("%s 地址不能包含空白", name)
+		}
 	}
 	return nil
 }

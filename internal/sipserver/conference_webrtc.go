@@ -25,7 +25,7 @@ func (s *Server) HandleConferenceWebRTC(ctx context.Context, roomNumber, usernam
 		username = "web"
 	}
 	id := fmt.Sprintf("web-%s-%d", sanitizeWebUser(username), time.Now().UnixNano())
-	pc, err := webrtc.NewPeerConnection(webrtc.Configuration{})
+	pc, err := s.newPeerConnection()
 	if err != nil {
 		return "", "", err
 	}
