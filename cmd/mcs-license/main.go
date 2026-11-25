@@ -16,14 +16,16 @@ func main() {
 		keyFile   = flag.String("key", ".license/mcs-license-private.key", "Ed25519 private key file (base64/hex 64 bytes or PKCS#8 PEM)")
 		customer  = flag.String("customer", "", "customer name")
 		maxPhones = flag.Int("max-phones", 0, "maximum number of phones")
+		machine   = flag.String("machine", "", "machine code shown on the customer's license page")
 		licenseID = flag.String("license-id", "", "license id (default: MCS-<timestamp>)")
 		issuedAt  = flag.String("issued-at", "", "issue time (default: now, RFC3339)")
 		expiresAt = flag.String("expires", "", "expiry date (YYYY-MM-DD or RFC3339); empty = perpetual")
 		out       = flag.String("out", "", "optional output file")
 	)
 	flag.Parse()
-	if *customer == "" || *maxPhones <= 0 {
-		fmt.Fprintln(os.Stderr, "usage: mcs-license -key keyfile -customer \"客户名\" -max-phones 50")
+	*machine = license.NormalizeMachineCode(*machine)
+	if *customer == "" || *maxPhones <= 0 || *machine == "" {
+		fmt.Fprintln(os.Stderr, "usage: mcs-license -key keyfile -customer \"客户名\" -max-phones 50 -machine \"MCS-....\"")
 		os.Exit(2)
 	}
 	raw, err := os.ReadFile(*keyFile)
@@ -52,7 +54,7 @@ func main() {
 	}
 	code, err := license.Encode(license.Payload{
 		Version: 1, LicenseID: *licenseID, Customer: *customer,
-		MaxPhones: *maxPhones, IssuedAt: *issuedAt, ExpiresAt: *expiresAt,
+		MaxPhones: *maxPhones, Machine: *machine, IssuedAt: *issuedAt, ExpiresAt: *expiresAt,
 	}, ed25519.PrivateKey(priv))
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "sign:", err)

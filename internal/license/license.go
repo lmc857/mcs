@@ -26,6 +26,7 @@ type Payload struct {
 	LicenseID string `json:"license_id"`
 	Customer  string `json:"customer"`
 	MaxPhones int    `json:"max_phones"`
+	Machine   string `json:"machine,omitempty"`
 	IssuedAt  string `json:"issued_at,omitempty"`
 	ExpiresAt string `json:"expires_at,omitempty"`
 }
@@ -35,6 +36,9 @@ type Info struct {
 	Customer           string `json:"customer"`
 	MaxPhones          int    `json:"max_phones"`
 	EffectiveMaxPhones int    `json:"effective_max_phones"`
+	MachineCode        string `json:"machine_code"`
+	MachineBound       bool   `json:"machine_bound"`
+	MachineMatch       bool   `json:"machine_match"`
 	IssuedAt           string `json:"issued_at,omitempty"`
 	ExpiresAt          string `json:"expires_at,omitempty"`
 	DaysLeft           int    `json:"days_left"`
@@ -42,14 +46,16 @@ type Info struct {
 	Status             string `json:"status"`
 	Activated          bool   `json:"activated"`
 	ActivatedAt        string `json:"activated_at,omitempty"`
+	machine            string
 }
 
 type Manager struct {
-	mu    sync.RWMutex
-	pub   ed25519.PublicKey
-	info  Info
-	trial int
-	now   func() time.Time
+	mu      sync.RWMutex
+	pub     ed25519.PublicKey
+	info    Info
+	trial   int
+	machine string
+	now     func() time.Time
 }
 
 func DefaultPublicKey() ed25519.PublicKey {
@@ -60,11 +66,11 @@ func DefaultPublicKey() ed25519.PublicKey {
 	return ed25519.PublicKey(pub)
 }
 
-func New(pub ed25519.PublicKey, trial int) *Manager {
+func New(pub ed25519.PublicKey, trial int, machine string) *Manager {
 	if trial <= 0 {
 		trial = trialPhones
 	}
-	return &Manager{pub: pub, trial: trial, info: Info{MaxPhones: trial, EffectiveMaxPhones: trial, Status: "trial", Customer: "未授权"}, now: time.Now}
+	return &Manager{pub: pub, trial: trial, machine: NormalizeMachineCode(machine), info: Info{MaxPhones: trial, EffectiveMaxPhones: trial, Status: "trial", Customer: "未授权"}, now: time.Now}
 }
 
 func (m *Manager) Info() Info {
@@ -79,6 +85,9 @@ func (m *Manager) Info() Info {
 	if m.now != nil {
 		now = m.now
 	}
+	info.MachineCode = m.machine
+	info.MachineBound = info.Activated && strings.TrimSpace(info.machine) != ""
+	info.MachineMatch = info.MachineBound && m.machine != "" && NormalizeMachineCode(info.machine) == m.machine
 	if !info.Activated {
 		info.Status = "trial"
 		info.MaxPhones = trial
@@ -126,6 +135,15 @@ func (m *Manager) Activate(code string) (Info, error) {
 	}
 	if info.MaxPhones <= 0 || info.MaxPhones > 100000 {
 		return m.Info(), errors.New("授权话机数量无效")
+	}
+	if m.machine == "" {
+		return m.Info(), errors.New("无法读取本机机器码，不能激活绑定授权")
+	}
+	if strings.TrimSpace(info.machine) == "" {
+		return m.Info(), errors.New("该激活码是旧版通用授权，未绑定设备；请使用本机机器码重新签发")
+	}
+	if NormalizeMachineCode(info.machine) != m.machine {
+		return m.Info(), errors.New("激活码与本机设备不匹配，请使用当前页面显示的机器码重新签发")
 	}
 	if info.ExpiresAt != "" {
 		exp, err := time.Parse(time.RFC3339, info.ExpiresAt)
@@ -183,7 +201,7 @@ func Decode(code string, pub ed25519.PublicKey) (Info, error) {
 	}
 	return Info{
 		LicenseID: p.LicenseID, Customer: p.Customer, MaxPhones: p.MaxPhones,
-		IssuedAt: p.IssuedAt, ExpiresAt: p.ExpiresAt,
+		IssuedAt: p.IssuedAt, ExpiresAt: p.ExpiresAt, machine: p.Machine,
 	}, nil
 }
 

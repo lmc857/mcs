@@ -202,7 +202,11 @@ func runServer(parent context.Context, configPath, logPath string, serviceMode b
 			}
 		}
 	}
-	lic := license.New(license.DefaultPublicKey(), 4)
+	machineCode, err := license.MachineCode()
+	if err != nil {
+		logger.Warn("machine code unavailable; license activation disabled", "error", err)
+	}
+	lic := license.New(license.DefaultPublicKey(), 4, machineCode)
 	if raw, ok := db.GetSetting("license_code"); ok {
 		if info, err := lic.Activate(raw); err != nil {
 			logger.Warn("ignore invalid license code", "error", err)

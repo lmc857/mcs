@@ -13,16 +13,16 @@ func TestActivationCode(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	code, err := Encode(Payload{Version: 1, LicenseID: "MCS-T1", Customer: "客户", MaxPhones: 32}, priv)
+	code, err := Encode(Payload{Version: 1, LicenseID: "MCS-T1", Customer: "客户", MaxPhones: 32, Machine: "MCS-TEST-DEVICE-0001"}, priv)
 	if err != nil {
 		t.Fatal(err)
 	}
-	m := New(pub, 4)
+	m := New(pub, 4, "MCS-TEST-DEVICE-0001")
 	info, err := m.Activate(code)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if info.MaxPhones != 32 || info.Customer != "客户" || info.Status != "licensed" {
+	if info.MaxPhones != 32 || info.Customer != "客户" || info.Status != "licensed" || !info.MachineMatch || info.MachineCode == "" {
 		t.Fatalf("info = %+v", info)
 	}
 	if m.MaxPhones() != 32 {
@@ -52,10 +52,11 @@ func TestActivationExpiry(t *testing.T) {
 		t.Fatal(err)
 	}
 	now := time.Date(2026, 11, 24, 10, 0, 0, 0, time.UTC)
-	m := New(pub, 4)
+	m := New(pub, 4, "MCS-TEST-DEVICE-0002")
 	m.now = func() time.Time { return now }
 	code, err := Encode(Payload{
 		Version: 1, LicenseID: "MCS-EXP", Customer: "客户", MaxPhones: 20,
+		Machine:   "MCS-TEST-DEVICE-0002",
 		ExpiresAt: now.Add(48 * time.Hour).Format(time.RFC3339),
 	}, priv)
 	if err != nil {
@@ -87,7 +88,60 @@ func TestExpiredActivationRejected(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := New(pub, 4).Activate(code); err == nil {
+	if _, err := New(pub, 4, "MCS-TEST-DEVICE-0003").Activate(code); err == nil {
 		t.Fatal("expired activation accepted")
+	}
+}
+
+func TestMachineBindingMismatch(t *testing.T) {
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	code, err := Encode(Payload{
+		Version: 1, LicenseID: "MCS-BIND", Customer: "客户", MaxPhones: 20,
+		Machine: "MCS-AAAA-BBBB-CCCC-DDDD",
+	}, priv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := New(pub, 4, "MCS-EEEE-FFFF-GGGG-HHHH").Activate(code); err == nil {
+		t.Fatal("code bound to another machine accepted")
+	}
+}
+
+func TestLegacyUnboundCodeRejected(t *testing.T) {
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	code, err := Encode(Payload{Version: 1, LicenseID: "MCS-LEGACY", Customer: "客户", MaxPhones: 20}, priv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := New(pub, 4, "MCS-TEST-DEVICE-0004").Activate(code); err == nil {
+		t.Fatal("legacy universal code accepted")
+	}
+}
+
+func TestNormalizeMachineCode(t *testing.T) {
+	if got := NormalizeMachineCode(" mcs-abcd-efgh-ijkl "); got != "MCS-ABCD-EFGH-IJKL" {
+		t.Fatalf("normalize = %q", got)
+	}
+	if NormalizeMachineCode("---") != "" {
+		t.Fatal("empty machine code accepted")
+	}
+}
+
+func TestCurrentMachineCode(t *testing.T) {
+	code, err := MachineCode()
+	if err != nil {
+		t.Skipf("machine code not available on this host: %v", err)
+	}
+	if !strings.HasPrefix(code, "MCS-") {
+		t.Fatalf("machine code = %q", code)
+	}
+	if NormalizeMachineCode(code) != code {
+		t.Fatalf("machine code not canonical: %q -> %q", code, NormalizeMachineCode(code))
 	}
 }

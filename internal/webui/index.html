@@ -503,6 +503,8 @@ textarea.bc-text{margin:0 17px 12px;width:calc(100% - 34px)}
             <dl class="kv">
               <dt>客户名称</dt><dd id="license-customer">—</dd>
               <dt>授权编号</dt><dd id="license-id">—</dd>
+              <dt>本机机器码</dt><dd><code id="license-machine">—</code> <button class="test-btn" onclick="copyMachineCode()">复制</button></dd>
+              <dt>设备绑定</dt><dd id="license-bound">—</dd>
               <dt>最大话机数</dt><dd id="license-max">—</dd>
               <dt>授权到期</dt><dd id="license-expires">—</dd>
               <dt>剩余天数</dt><dd id="license-days">—</dd>
@@ -522,7 +524,7 @@ textarea.bc-text{margin:0 17px 12px;width:calc(100% - 34px)}
               <span class="hint" id="license-msg"></span>
             </div>
           </div>
-          <div class="form-note">激活码与客户和话机数量绑定；请向供应商获取。激活成功后立即生效。</div>
+          <div class="form-note">激活码与客户、话机数量和本机机器码绑定；请把本机机器码发给供应商生成激活码。换机、重装系统可能导致机器码变化，需要重新签发。</div>
         </div>
       </section>
 
@@ -1777,6 +1779,8 @@ async function loadLicense(){
     $('license-status').textContent = d.expired ? '已过期' : (licensed ? '已授权' : '试用授权');
     $('license-customer').textContent = d.customer || '—';
     $('license-id').textContent = d.license_id || '—';
+    $('license-machine').textContent = d.machine_code || '无法读取';
+    $('license-bound').textContent = !d.machine_code ? '机器码不可用' : (licensed ? (d.machine_match ? '已绑定当前设备' : '绑定不匹配') : '等待激活');
     $('license-max').textContent = (d.effective_max_phones ?? d.max_phones ?? 0) + ' 台';
     $('license-expires').textContent = d.expires_at ? time(d.expires_at) : '永久';
     $('license-days').textContent = d.expired ? '已过期' : (d.expires_at ? '剩余 ' + (d.days_left || 0) + ' 天' : '永久');
@@ -1786,13 +1790,19 @@ async function loadLicense(){
     if(d.expired){
       $('license-note').textContent = '授权已过期，当前按试用授权限制（' + (d.effective_max_phones || 4) + ' 台在线）；请续期激活。';
     }else if(!licensed){
-      $('license-note').textContent = '当前为试用授权，最多 ' + (d.effective_max_phones || 4) + ' 台话机在线；激活后提升上限。';
+      $('license-note').textContent = d.machine_code ? ('当前为试用授权，最多 ' + (d.effective_max_phones || 4) + ' 台话机在线；请把机器码发给供应商生成绑定激活码。') : '无法读取本机机器码，授权激活不可用；请检查系统环境或联系供应商。';
     }else if((d.used_phones || 0) > (d.effective_max_phones || 0)){
       $('license-note').textContent = '已配置话机数超过授权数量，新增设备会被拒绝，请激活更多授权。';
     }else{
       $('license-note').textContent = '授权已生效；到期后剩余 ' + (d.days_left || 0) + ' 天。';
     }
   }catch(e){ $('license-status').textContent = '授权信息读取失败'; }
+}
+
+function copyMachineCode(){
+  const code = $('license-machine')?.textContent || '';
+  if(!code || code === '—' || code === '无法读取'){ $('license-msg').textContent = '没有可复制的机器码'; return; }
+  navigator.clipboard?.writeText(code).then(() => { $('license-msg').textContent = '机器码已复制'; }).catch(() => { $('license-msg').textContent = '复制失败，请手动选择'; });
 }
 
 async function activateLicense(){
