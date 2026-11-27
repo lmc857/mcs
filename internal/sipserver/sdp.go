@@ -150,54 +150,92 @@ func rewriteSDPWithCrypto(body []byte, audioPort, videoPort int, ip, audioCrypto
 	text := strings.ReplaceAll(string(body), "\r\n", "\n")
 	lines := strings.Split(text, "\n")
 	var out []string
-	audioSeen := false
-	videoSeen := false
+	var block []string
 	media := ""
+	audioSeen := false
+	videoPortSet := false
+
+	flush := func() {
+		if media == "" {
+			return
+		}
+		crypto := ""
+		switch media {
+		case "audio":
+			crypto = audioCrypto
+		case "video":
+			if videoPortSet {
+				crypto = videoCrypto
+			}
+		}
+		if crypto != "" {
+			// SDP media section order is m=, i=, c=, b=, k=, a=.
+			// a=crypto is an attribute, so it must come after the fixed
+			// media lines, not immediately after m=.
+			insert := len(block)
+			for i, line := range block {
+				if strings.HasPrefix(strings.TrimSpace(line), "a=") {
+					insert = i
+					break
+				}
+			}
+			cryptoLine := "a=crypto:" + crypto
+			block = append(block, "")
+			copy(block[insert+1:], block[insert:])
+			block[insert] = cryptoLine
+		}
+		out = append(out, block...)
+		block = nil
+		media = ""
+		videoPortSet = false
+	}
+
 	for _, line := range lines {
 		trimmed := strings.TrimSpace(line)
 		switch {
-		case strings.HasPrefix(trimmed, "c=IN IP4 "):
-			out = append(out, "c=IN IP4 "+ip)
 		case strings.HasPrefix(trimmed, "m=audio "):
+			flush()
 			media = "audio"
 			fields := strings.Fields(line)
 			if len(fields) >= 3 {
 				fields[1] = strconv.Itoa(audioPort)
-				out = append(out, strings.Join(fields, " "))
-				if audioCrypto != "" {
-					out = append(out, "a=crypto:"+audioCrypto)
-				}
+				block = append(block, strings.Join(fields, " "))
 				audioSeen = true
 			} else {
-				out = append(out, line)
+				block = append(block, line)
 			}
 		case strings.HasPrefix(trimmed, "m=video "):
+			flush()
 			media = "video"
 			fields := strings.Fields(line)
 			if len(fields) >= 3 {
 				if videoPort > 0 {
 					fields[1] = strconv.Itoa(videoPort)
+					videoPortSet = true
 				} else {
 					fields[1] = "0"
 				}
-				out = append(out, strings.Join(fields, " "))
-				if videoCrypto != "" {
-					out = append(out, "a=crypto:"+videoCrypto)
-				}
-				videoSeen = true
+				block = append(block, strings.Join(fields, " "))
 			} else {
-				out = append(out, line)
+				block = append(block, line)
 			}
-		case strings.HasPrefix(trimmed, "a=crypto:"):
-			_ = media
-			// replaced above with MCS's own crypto attribute
+		case media == "" && strings.HasPrefix(trimmed, "c=IN IP4 "):
+			out = append(out, "c=IN IP4 "+ip)
+		case media != "" && strings.HasPrefix(trimmed, "c=IN IP4 "):
+			block = append(block, "c=IN IP4 "+ip)
+		case media != "" && strings.HasPrefix(trimmed, "a=crypto:"):
+			// Replaced at flush time with the MCS-generated key.
 		default:
-			out = append(out, line)
+			if media == "" {
+				out = append(out, line)
+			} else {
+				block = append(block, line)
+			}
 		}
 	}
+	flush()
 	if !audioSeen {
 		return nil, fmt.Errorf("sdp has no audio media")
 	}
-	_ = videoSeen
 	return []byte(strings.Join(out, "\r\n") + "\r\n"), nil
 }

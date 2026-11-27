@@ -1,6 +1,6 @@
 # MCS 用户使用手册
 
-**适用版本：MCS 0.15.1**  
+**适用版本：MCS 0.16.0**  
 **文档版本：2026-11-23**
 
 ---
@@ -1204,6 +1204,33 @@ call rejected ... code=488 b_leg_code=488 b_leg_reason=Not Acceptable Here
 | b_leg_error=TLS... | MCS 到被叫的 TLS 连接失败 |
 
 如果 `b_leg_error` 包含 TLS 握手错误，检查被叫的 SIP TLS 证书、端口和传输方式，不是主叫的 CA 问题。
+
+### 17.2.3 SDP 字段顺序异常
+
+0.16.0 起修复了 SDP 改写中的媒体属性顺序：
+
+```text
+m=audio ...
+i=...
+c=...
+b=...
+k=...
+a=...
+```
+
+旧版本可能把 MCS 生成的 `a=crypto` 插在 `m=` 后面，变成：
+
+```text
+m=audio ...
+a=crypto:...
+i=...
+c=...
+b=...
+```
+
+对 SDP 顺序校验严格的终端可能因此解析失败或出现 488。
+
+现在 `a=crypto` 会插入在媒体级固定字段之后、原有属性之前。
 
 ### 17.3 能接通但没有声音
 

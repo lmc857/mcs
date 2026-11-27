@@ -265,3 +265,61 @@ func TestSRTPCall(t *testing.T) {
 		time.Sleep(30 * time.Millisecond)
 	}
 }
+
+func TestSDPRewriteCanonicalMediaOrder(t *testing.T) {
+	body := []byte("v=0\r\no=- 1 1 IN IP4 10.0.0.5\r\ns=-\r\nc=IN IP4 10.0.0.5\r\nt=0 0\r\n" +
+		"m=audio 10000 RTP/SAVP 0\r\n" +
+		"i=audio media\r\n" +
+		"c=IN IP4 10.0.0.5\r\n" +
+		"b=AS:64\r\n" +
+		"k=prompt\r\n" +
+		"a=rtpmap:0 PCMU/8000\r\n" +
+		"a=crypto:1 AES_CM_128_HMAC_SHA1_80 inline:old\r\n" +
+		"m=video 10002 RTP/SAVPF 96\r\n" +
+		"i=video media\r\n" +
+		"c=IN IP4 10.0.0.5\r\n" +
+		"b=TIAS:64000\r\n" +
+		"k=prompt\r\n" +
+		"a=rtpmap:96 H264/90000\r\n" +
+		"a=crypto:1 AES_CM_128_HMAC_SHA1_80 inline:old\r\n")
+	out, err := rewriteSDPWithCrypto(body, 20000, 20002, "192.0.2.1",
+		"1 AES_CM_128_HMAC_SHA1_80 inline:audio", "1 AES_CM_128_HMAC_SHA1_80 inline:video")
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(strings.ReplaceAll(string(out), "\r\n", "\n"), "\n")
+	var mediaStart []int
+	for i, line := range lines {
+		if strings.HasPrefix(line, "m=") {
+			mediaStart = append(mediaStart, i)
+		}
+	}
+	if len(mediaStart) != 2 {
+		t.Fatalf("media sections = %d\n%s", len(mediaStart), out)
+	}
+	for n, start := range mediaStart {
+		end := len(lines)
+		if n+1 < len(mediaStart) {
+			end = mediaStart[n+1]
+		}
+		order := []string{}
+		for _, line := range lines[start:end] {
+			if len(line) > 0 {
+				order = append(order, line[:2])
+			}
+		}
+		want := []string{"m=", "i=", "c=", "b=", "k=", "a=", "a="}
+		if n == 0 {
+			want = []string{"m=", "i=", "c=", "b=", "k=", "a=", "a="}
+		}
+		if strings.Join(order, ",") != strings.Join(want, ",") {
+			t.Fatalf("media %d order = %v, want %v\n%s", n, order, want, out)
+		}
+	}
+	if bytes.Count(out, []byte("a=crypto:")) != 2 {
+		t.Fatalf("crypto lines = %d\n%s", bytes.Count(out, []byte("a=crypto:")), out)
+	}
+	if strings.Contains(string(out), "inline:old") {
+		t.Fatalf("old crypto key leaked:\n%s", out)
+	}
+}
