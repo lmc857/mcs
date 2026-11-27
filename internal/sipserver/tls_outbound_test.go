@@ -15,6 +15,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -45,7 +46,8 @@ func TestTLSCalleeOutbound(t *testing.T) {
 		t.Fatal("register store")
 	}
 	srv, err := New(st, NewAuthenticator("mcs", "test"), store.NewCDRStore(10), store.NewAlarmStore(10), Options{
-		Domain: "mcs.local", Advertise: fmt.Sprintf("127.0.0.1:%d", mcsPort), DataDir: t.TempDir(),
+		Domain: "mcs.local", Advertise: fmt.Sprintf("127.0.0.1:%d", mcsPort),
+		SIPTLS: "127.0.0.1:25083", DataDir: t.TempDir(),
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 	}, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	if err != nil {
@@ -60,6 +62,20 @@ func TestTLSCalleeOutbound(t *testing.T) {
 	srvB, _ := sipgo.NewServer(uaB)
 	got := make(chan struct{}, 1)
 	srvB.OnInvite(func(req *sip.Request, tx sip.ServerTransaction) {
+		ch := req.Contact()
+		if ch == nil {
+			t.Errorf("B-leg INVITE has no Contact")
+		} else {
+			if ch.Address.Scheme != "sips" {
+				t.Errorf("B-leg Contact scheme = %q, want sips", ch.Address.Scheme)
+			}
+			if ch.Address.Port != 25083 {
+				t.Errorf("B-leg Contact port = %d, want 25083", ch.Address.Port)
+			}
+			if tp, _ := ch.Address.UriParams.Get("transport"); !strings.EqualFold(tp, "tls") {
+				t.Errorf("B-leg Contact transport = %q, want tls", tp)
+			}
+		}
 		res := sip.NewResponseFromRequest(req, 200, "OK", testSDP(28119))
 		res.AppendHeader(sip.NewHeader("Contact", "<sip:1002@127.0.0.1:28018;transport=tls>"))
 		_ = tx.Respond(res)

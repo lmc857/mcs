@@ -1,6 +1,6 @@
 # MCS API 参考（当前实现）
 
-> 适用版本：`0.14.4` 当前代码。
+> 适用版本：`0.15.0` 当前代码。
 > 文中只列 **已经实现** 的接口；规划中的接口见 [MCS-接口与数据模型.md](MCS-接口与数据模型.md)，不要直接对接规划稿。
 > 机器可读版本：[openapi.yaml](openapi.yaml)。
 
@@ -413,7 +413,8 @@ CDR 字段：
 ```json
 {"id":"...","call_id":"...","from":"1002","to":"1001","device_id":"",
  "start_at":"...","answer_at":"...","end_at":"...","duration_s":12,
- "result":"answered","recording":"/recordings/2026/11/18/....wav"}
+ "result":"answered","b_leg_code":200,"b_leg_reason":"OK",
+ "recording":"/recordings/2026/11/18/....wav"}
 ```
 
 录音 URL 需登录（启用鉴权时）。

@@ -89,7 +89,7 @@ func (s *Server) handlePagingInvite(req *sip.Request, tx sip.ServerTransaction, 
 	go ps.readRTP()
 
 	sdp := pagingSDP(s.advertiseHost, conn.LocalAddr().(*net.UDPAddr).Port)
-	if err := dss.RespondSDP(sdp); err != nil {
+	if err := s.respondSDPWithContact(dss, sdp); err != nil {
 		ps.stop()
 		return
 	}

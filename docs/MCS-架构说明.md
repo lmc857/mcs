@@ -7,7 +7,7 @@
 | 项目 | 内容 |
 | --- | --- |
 | 文档版本 | v1.0 |
-| 对应代码 | `0.14.4`（2026-11） |
+| 对应代码 | `0.15.0`（2026-11） |
 | 读者 | 后端研发、终端/平台集成、部署运维 |
 | 关联文档 | [README](../README.md) · [技术方案](MCS-技术方案.md) · [API 参考](MCS-API参考.md) · [配置参考](MCS-配置参考.md) · [部署手册](../deploy/README.md) |
 
@@ -1263,7 +1263,7 @@ Linux 单元做了基本加固：`NoNewPrivileges`、`ProtectSystem=strict`、`P
 | SRTP | 终端侧启用 `RTP/SAVP` + `a=crypto`；MCS 自动协商，无需额外开关 |
 | WebRTC | 需要 HTTPS 或 `localhost` 才能用麦克风；Pion 自动 DTLS-SRTP |
 
-0.14.4 起：
+0.15.0 起：
 - B 腿会保留注册 Contact/REGISTER transport 的 `transport=tls`，出站 INVITE 使用 TLS；
 - `tls_ca` 用于信任终端私有 CA，`tls_insecure` 仅用于内网自签测试；
 - 网页可配置 `srtp_mode`：`auto` / `required` / `off`；

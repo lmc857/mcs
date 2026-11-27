@@ -74,7 +74,7 @@ func (s *Server) heartbeatOne(ctx context.Context, d store.View, timeout time.Du
 	req.AppendHeader(sip.NewHeader("Call-ID", fmt.Sprintf("hb-%d-%s", time.Now().UnixNano(), d.Ext)))
 	req.AppendHeader(sip.NewHeader("CSeq", "1 OPTIONS"))
 	req.AppendHeader(sip.NewHeader("Max-Forwards", "69"))
-	req.AppendHeader(sip.NewHeader("Contact", fmt.Sprintf("<sip:mcs@%s>", s.advertise)))
+	req.AppendHeader(s.contactForTransport(transportForView(d, uri)))
 	req.AppendHeader(sip.NewHeader("User-Agent", serverName))
 	res, err := s.client.Do(hctx, req)
 	if err != nil || res == nil {

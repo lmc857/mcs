@@ -1640,7 +1640,7 @@ function renderCDR(data){
       <td class="badge">${time(r.start_at)}</td>
       <td class="ext">${esc(r.from || '—')}</td>
       <td class="ext">${esc(r.to || '—')}</td>
-      <td><span class="dot ${r.result === 'answered' ? 'on' : 'off'}"></span>${resultLabel(r.result)}</td>
+      <td><span class="dot ${r.result === 'answered' ? 'on' : 'off'}"></span>${resultLabel(r.result)}${r.b_leg_code && r.result !== 'answered' ? ` <span class="badge" title="${esc(r.b_leg_reason || '')}">B:${r.b_leg_code}</span>` : ''}</td>
       <td class="badge">${dur(r.duration_s)}</td>
       <td>${r.recording ? `<a href="${esc(r.recording)}" target="_blank">播放</a>` : '—'}</td>
     </tr>`).join('');

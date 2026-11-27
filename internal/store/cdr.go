@@ -7,17 +7,19 @@ import (
 
 // CDR is one completed call record (M0: in-memory ring).
 type CDR struct {
-	ID        string `json:"id"`
-	CallID    string `json:"call_id"`
-	From      string `json:"from"`
-	To        string `json:"to"`
-	DeviceID  string `json:"device_id,omitempty"`
-	StartAt   string `json:"start_at"`
-	AnswerAt  string `json:"answer_at,omitempty"`
-	EndAt     string `json:"end_at,omitempty"`
-	Duration  int    `json:"duration_s"`
-	Result    string `json:"result"`
-	Recording string `json:"recording,omitempty"`
+	ID         string `json:"id"`
+	CallID     string `json:"call_id"`
+	From       string `json:"from"`
+	To         string `json:"to"`
+	DeviceID   string `json:"device_id,omitempty"`
+	StartAt    string `json:"start_at"`
+	AnswerAt   string `json:"answer_at,omitempty"`
+	EndAt      string `json:"end_at,omitempty"`
+	Duration   int    `json:"duration_s"`
+	Result     string `json:"result"`
+	BLegCode   int    `json:"b_leg_code,omitempty"`
+	BLegReason string `json:"b_leg_reason,omitempty"`
+	Recording  string `json:"recording,omitempty"`
 }
 
 type CDRStore struct {

@@ -250,8 +250,10 @@ func runServer(parent context.Context, configPath, logPath string, serviceMode b
 	alarms := store.NewAlarmStoreDB(1000, db)
 	auth := sipserver.NewAuthenticator(cfg.Auth.Realm, secret)
 	sipSrv, err := sipserver.New(st, auth, cdr, alarms, sipserver.Options{
-		Domain: cfg.Server.Domain, Advertise: cfg.Server.Advertise, DataDir: cfg.Storage.DataDir,
-		Alarm: cfg.Alarm, Registration: cfg.Registration, Broadcast: cfg.Broadcast, Paging: cfg.Paging, Conference: cfg.Conference, Media: cfg.Media, TTS: ttsCfg, Zones: cfg.Zones, License: lic,
+		Domain: cfg.Server.Domain, Advertise: cfg.Server.Advertise,
+		SIPUDP: cfg.Server.SIPUDP, SIPTCP: cfg.Server.SIPTCP, SIPTLS: cfg.Server.SIPTLS,
+		DataDir: cfg.Storage.DataDir,
+		Alarm:   cfg.Alarm, Registration: cfg.Registration, Broadcast: cfg.Broadcast, Paging: cfg.Paging, Conference: cfg.Conference, Media: cfg.Media, TTS: ttsCfg, Zones: cfg.Zones, License: lic,
 		TLSClientConfig: tlsClient, SRTPMode: cfg.Server.SRTPMode, WebRTC: cfg.WebRTC,
 	}, logger)
 	if err != nil {

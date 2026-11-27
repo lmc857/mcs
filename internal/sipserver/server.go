@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"log/slog"
+	"net"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -34,6 +35,10 @@ type Server struct {
 	domain          string
 	advertise       string
 	advertiseHost   string
+	advertisePort   string
+	sipUDPPort      string
+	sipTCPPort      string
+	sipTLSPort      string
 	dataDir         string
 	cdr             *store.CDRStore
 	alarms          *store.AlarmStore
@@ -68,6 +73,9 @@ type Server struct {
 type Options struct {
 	Domain          string
 	Advertise       string
+	SIPUDP          string
+	SIPTCP          string
+	SIPTLS          string
 	DataDir         string
 	Alarm           config.AlarmConfig
 	Registration    config.RegistrationConfig
@@ -116,7 +124,8 @@ func New(st *store.Store, auth *Authenticator, cdr *store.CDRStore, alarms *stor
 	pagingCfg := opts.Paging
 	s := &Server{
 		ua: ua, srv: srv, client: client, dua: dua, store: st, auth: auth,
-		log: log, domain: opts.Domain, advertise: opts.Advertise, advertiseHost: advHost,
+		log: log, domain: opts.Domain, advertise: opts.Advertise, advertiseHost: advHost, advertisePort: strconv.Itoa(advPort),
+		sipUDPPort: portOf(opts.SIPUDP), sipTCPPort: portOf(opts.SIPTCP), sipTLSPort: portOf(opts.SIPTLS),
 		dataDir: opts.DataDir, cdr: cdr, alarms: alarms, alarmCfg: opts.Alarm,
 		registrationCfg: opts.Registration,
 		hbFailures:      map[string]int{},
@@ -415,4 +424,68 @@ func (s *Server) SetConferenceAudio(c config.ConferenceAudioConfig) error {
 	s.conferenceAudio = c
 	s.audioMu.Unlock()
 	return nil
+}
+
+func portOf(addr string) string {
+	_, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return ""
+	}
+	return port
+}
+
+// transportForView determines the transport used to reach a registered device.
+// A Contact with sips: always means TLS; otherwise the transport parameter and
+// the transport observed at REGISTER time are used.
+func transportForView(v store.View, uri sip.Uri) string {
+	if strings.EqualFold(uri.Scheme, "sips") {
+		return "tls"
+	}
+	if tp, ok := uri.UriParams.Get("transport"); ok && tp != "" {
+		return strings.ToLower(tp)
+	}
+	if v.Transport != "" {
+		return strings.ToLower(v.Transport)
+	}
+	return "udp"
+}
+
+func (s *Server) contactForTransport(transport string) *sip.ContactHeader {
+	t := strings.ToLower(strings.TrimSpace(transport))
+	scheme := "sip"
+	port := s.advertisePort
+	switch t {
+	case "tls":
+		scheme = "sips"
+		if s.sipTLSPort != "" {
+			port = s.sipTLSPort
+		}
+	case "tcp":
+		if s.sipTCPPort != "" {
+			port = s.sipTCPPort
+		}
+	case "udp", "":
+		t = "udp"
+		if s.sipUDPPort != "" {
+			port = s.sipUDPPort
+		}
+	}
+	uri := sip.Uri{Scheme: scheme, User: "mcs", Host: s.advertiseHost}
+	if port != "" {
+		if n, err := strconv.Atoi(port); err == nil {
+			uri.Port = n
+		}
+	}
+	params := sip.NewParams()
+	params.Add("transport", t)
+	uri.UriParams = params
+	return &sip.ContactHeader{Address: uri}
+}
+
+// respondSDPWithContact answers an incoming dialog with a Contact header that
+// matches the transport used by that incoming request.
+func (s *Server) respondSDPWithContact(dss *sipgo.DialogServerSession, sdp []byte) error {
+	res := sip.NewSDPResponseFromRequest(dss.InviteRequest, sdp)
+	res.AppendHeader(s.contactForTransport(dss.InviteRequest.Transport()))
+	return dss.WriteResponse(res)
 }

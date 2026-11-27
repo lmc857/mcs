@@ -892,7 +892,7 @@ func (s *Server) handleConferenceInvite(req *sip.Request, tx sip.ServerTransacti
 	s.conference.addCall(p)
 	_ = dss.Respond(100, "Trying", nil)
 	sdp := conferenceSDP(s.advertiseHost, conn.LocalAddr().(*net.UDPAddr).Port, codec, videoPort, videoPT)
-	if err := dss.RespondSDP(sdp); err != nil {
+	if err := s.respondSDPWithContact(dss, sdp); err != nil {
 		p.stop(false)
 		return
 	}

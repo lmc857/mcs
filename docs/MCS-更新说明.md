@@ -1,12 +1,25 @@
 # MCS 更新说明
 
-> 当前版本：**0.14.4**
+> 当前版本：**0.15.0**
 > 更新日期：2026-11-27
 > 适用：Windows 服务版、Linux 手动部署、源码部署
 
 本文记录近期已交付的功能、升级注意事项和当前边界。详细操作见
 [用户使用手册](MCS-用户使用手册.pdf)、[部署与运维手册](MCS-使用手册.md)、
 [API 参考](MCS-API参考.md) 和 [架构说明](MCS-架构说明.md)。
+
+## 0.15.0：TLS 会话 Contact 合规与 B 腿状态落库
+
+- B 腿 INVITE 的 Contact 跟随本腿实际传输：
+  - TLS/sips：`<sips:mcs@host:tls_port;transport=tls>`
+  - UDP：`<sip:mcs@host:udp_port;transport=udp>`
+  - TCP：`<sip:mcs@host:tcp_port;transport=tcp>`
+- 主叫侧 180/200/4xx/487 响应使用与主叫传输一致的 Contact；
+- 广播 INVITE、OPTIONS 心跳同样按目标终端传输生成 Contact；
+- 会议室/寻呼网页加入的 200 OK 也使用正确 Contact；
+- Contact 端口使用实际监听端口，不再固定 `advertise` 的 5060；
+- CDR 新增 `b_leg_code`、`b_leg_reason`，话单列表显示 B 腿失败码；
+- 保留 B 腿真实 SIP 状态，不再全部合成 480。
 
 ## 0.14.4：保留 B 腿真实失败原因
 
@@ -358,6 +371,7 @@ systemctl start mcs
 
 | 版本 | 主要内容 |
 | --- | --- |
+| 0.15.0 | TLS Contact sips 修复、A/B/广播/心跳 Contact、CDR B 腿码 |
 | 0.14.4 | B 腿真实失败码/原因透传与日志 |
 | 0.14.3 | 实时日志复制、布局、筛选下载 |
 | 0.14.2 | SIP 认证日志、认证 Realm 网页配置 |
@@ -377,7 +391,7 @@ Windows 0.14.0 包：
 
 ```text
 dist/MCS-Windows-Build-0.14.0.zip
-SHA-256: 4b5e594b7295da166c6659f805d27e67d8e5ca71fb4ba79e82eaa15afe2cc712
+SHA-256: df231a5f46e626beef1f7df51d1c0ea00f1043a230e881028f6f91f5445ec7d4
 ```
 
 > 安装包和二进制属于构建产物，不在 Git 仓库中；源码提交以仓库 `main` 分支为准。

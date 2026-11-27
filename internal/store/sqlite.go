@@ -66,7 +66,9 @@ func (d *DB) migrate() error {
 			end_at TEXT NOT NULL DEFAULT '',
 			duration_s INTEGER NOT NULL DEFAULT 0,
 			result TEXT NOT NULL,
-			recording TEXT NOT NULL DEFAULT ''
+			recording TEXT NOT NULL DEFAULT '',
+			b_leg_code INTEGER NOT NULL DEFAULT 0,
+			b_leg_reason TEXT NOT NULL DEFAULT ''
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_cdr_start ON cdr(start_at)`,
 		`CREATE TABLE IF NOT EXISTS alarms (
@@ -125,7 +127,10 @@ func (d *DB) migrate() error {
 			return fmt.Errorf("migrate: %w", err)
 		}
 	}
-	_, _ = d.sql.Exec(`INSERT OR REPLACE INTO schema_meta(key,value) VALUES('schema_version','1')`)
+	// Upgrade pre-0.15 databases in place.
+	_, _ = d.sql.Exec(`ALTER TABLE cdr ADD COLUMN b_leg_code INTEGER NOT NULL DEFAULT 0`)
+	_, _ = d.sql.Exec(`ALTER TABLE cdr ADD COLUMN b_leg_reason TEXT NOT NULL DEFAULT ''`)
+	_, _ = d.sql.Exec(`INSERT OR REPLACE INTO schema_meta(key,value) VALUES('schema_version','2')`)
 	return nil
 }
 
@@ -153,9 +158,9 @@ func (d *DB) SaveCDR(c CDR) error {
 		return nil
 	}
 	_, err := d.sql.Exec(`INSERT OR REPLACE INTO cdr
-		(id,call_id,from_ext,to_ext,device_id,start_at,answer_at,end_at,duration_s,result,recording)
-		VALUES(?,?,?,?,?,?,?,?,?,?,?)`,
-		c.ID, c.CallID, c.From, c.To, c.DeviceID, c.StartAt, c.AnswerAt, c.EndAt, c.Duration, c.Result, c.Recording)
+		(id,call_id,from_ext,to_ext,device_id,start_at,answer_at,end_at,duration_s,result,recording,b_leg_code,b_leg_reason)
+		VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		c.ID, c.CallID, c.From, c.To, c.DeviceID, c.StartAt, c.AnswerAt, c.EndAt, c.Duration, c.Result, c.Recording, c.BLegCode, c.BLegReason)
 	return err
 }
 
@@ -166,7 +171,7 @@ func (d *DB) LoadCDR(limit int) []CDR {
 	if limit <= 0 {
 		limit = 2000
 	}
-	rows, err := d.sql.Query(`SELECT id,call_id,from_ext,to_ext,device_id,start_at,answer_at,end_at,duration_s,result,recording
+	rows, err := d.sql.Query(`SELECT id,call_id,from_ext,to_ext,device_id,start_at,answer_at,end_at,duration_s,result,recording,b_leg_code,b_leg_reason
 		FROM (SELECT * FROM cdr ORDER BY start_at DESC LIMIT ?) ORDER BY start_at ASC`, limit)
 	if err != nil {
 		return nil
@@ -175,7 +180,7 @@ func (d *DB) LoadCDR(limit int) []CDR {
 	var out []CDR
 	for rows.Next() {
 		var c CDR
-		if err := rows.Scan(&c.ID, &c.CallID, &c.From, &c.To, &c.DeviceID, &c.StartAt, &c.AnswerAt, &c.EndAt, &c.Duration, &c.Result, &c.Recording); err == nil {
+		if err := rows.Scan(&c.ID, &c.CallID, &c.From, &c.To, &c.DeviceID, &c.StartAt, &c.AnswerAt, &c.EndAt, &c.Duration, &c.Result, &c.Recording, &c.BLegCode, &c.BLegReason); err == nil {
 			out = append(out, c)
 		}
 	}

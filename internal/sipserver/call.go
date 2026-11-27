@@ -322,7 +322,7 @@ func (s *Server) bridge(c *call, offer sdpInfo) {
 		reason = "Temporarily Unavailable"
 	}
 	if c.ctx.Err() == nil {
-		_ = c.a.Respond(code, reason, nil)
+		_ = c.a.Respond(code, reason, nil, c.aContactHeader())
 	}
 	s.log.Info("call rejected", "call_id", c.id, "from", c.from, "to", c.to, "result", result,
 		"code", code, "reason", reason, "targets", len(c.targets),
@@ -441,7 +441,7 @@ func (c *call) tryTarget(t alarmTarget, offer sdpInfo) (bool, string) {
 	reqB.AppendHeader(sip.NewHeader("Call-ID", bID))
 	reqB.AppendHeader(sip.NewHeader("CSeq", "1 INVITE"))
 	reqB.AppendHeader(sip.NewHeader("Max-Forwards", "69"))
-	reqB.AppendHeader(sip.NewHeader("Contact", fmt.Sprintf("<sip:mcs@%s>", s.advertise)))
+	reqB.AppendHeader(s.contactForTransport(transportForView(t.view, uri)))
 	reqB.AppendHeader(sip.NewHeader("User-Agent", serverName))
 	reqB.AppendHeader(sip.NewHeader("Content-Type", "application/sdp"))
 	reqB.SetBody(sdpB)
@@ -494,7 +494,7 @@ func (c *call) tryTarget(t alarmTarget, offer sdpInfo) (bool, string) {
 						body = rewritten
 					}
 				}
-				if err := c.a.Respond(res.StatusCode, res.Reason, body); err != nil {
+				if err := c.a.Respond(res.StatusCode, res.Reason, body, c.aContactHeader()); err != nil {
 					if c.ctx.Err() == nil {
 						s.log.Warn("forward provisional failed", "call_id", c.id, "error", err)
 					}
@@ -649,9 +649,12 @@ func (c *call) tryTarget(t alarmTarget, offer sdpInfo) (bool, string) {
 		vb.start(va, nil)
 	}
 
+	// Respond with a transport-correct Contact (sips for a TLS caller).
 	// RespondSDP waits for the caller's ACK; keep it off the media path.
 	go func() {
-		if err := c.a.RespondSDP(sdpA); err != nil && c.ctx.Err() == nil {
+		res := sip.NewSDPResponseFromRequest(c.a.InviteRequest, sdpA)
+		res.AppendHeader(c.aContactHeader())
+		if err := c.a.WriteResponse(res); err != nil && c.ctx.Err() == nil {
 			s.log.Warn("answer/ack failed", "call_id", c.id, "error", err)
 		}
 	}()
@@ -830,16 +833,21 @@ func (c *call) finish(result string) {
 				duration = 0
 			}
 		}
+		c.stateMu.RLock()
+		lastCode, lastReason := c.lastCode, c.lastReason
+		c.stateMu.RUnlock()
 		cdr := store.CDR{
-			ID:        c.id,
-			CallID:    c.id,
-			From:      c.from,
-			To:        to,
-			StartAt:   c.startAt.Format(time.RFC3339),
-			EndAt:     end.Format(time.RFC3339),
-			Duration:  duration,
-			Result:    resultValue,
-			Recording: recording,
+			ID:         c.id,
+			CallID:     c.id,
+			From:       c.from,
+			To:         to,
+			StartAt:    c.startAt.Format(time.RFC3339),
+			EndAt:      end.Format(time.RFC3339),
+			Duration:   duration,
+			Result:     resultValue,
+			BLegCode:   lastCode,
+			BLegReason: lastReason,
+			Recording:  recording,
 		}
 		if !answeredAt.IsZero() {
 			cdr.AnswerAt = answeredAt.Format(time.RFC3339)
@@ -953,7 +961,7 @@ func (s *Server) handleCancel(req *sip.Request, tx sip.ServerTransaction) {
 	}
 	c.cancel()
 	go func() {
-		_ = c.a.Respond(487, "Request Terminated", nil)
+		_ = c.a.Respond(487, "Request Terminated", nil, c.aContactHeader())
 		c.finish("canceled")
 	}()
 }
@@ -1200,4 +1208,12 @@ func (s *Server) checkSRTPPolicy(offer sdpInfo) error {
 		}
 	}
 	return nil
+}
+
+func (c *call) aContactHeader() *sip.ContactHeader {
+	tp := ""
+	if c.a != nil && c.a.InviteRequest != nil {
+		tp = c.a.InviteRequest.Transport()
+	}
+	return c.server.contactForTransport(tp)
 }
