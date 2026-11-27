@@ -349,7 +349,10 @@ func TestSDPRewriteTransportAddresses(t *testing.T) {
 	if !strings.Contains(text, "c=IN IP4 192.168.68.106") {
 		t.Fatalf("connection not rewritten:\n%s", text)
 	}
-	if !strings.Contains(text, "a=rtcp:4019 IN IP4 192.168.68.106") {
-		t.Fatalf("RTCP address not rewritten:\n%s", text)
+	if !strings.Contains(text, "a=rtcp:20000 IN IP4 192.168.68.106") {
+		t.Fatalf("RTCP port/address not rewritten:\n%s", text)
+	}
+	if strings.Contains(text, "a=rtcp:4019") {
+		t.Fatalf("old RTCP port remained:\n%s", text)
 	}
 }

@@ -1,6 +1,6 @@
 # MCS 用户使用手册
 
-**适用版本：MCS 0.16.1**  
+**适用版本：MCS 0.16.2**  
 **文档版本：2026-11-23**
 
 ---
@@ -1235,7 +1235,9 @@ b=...
 同时修复：
 
 - `o=` 中的 origin IP；
-- `a=rtcp:<port> IN IP4 <addr>` 中的 RTCP 地址。
+- `a=rtcp:<port> IN IP4 <addr>` 中的 RTCP 地址和端口。
+
+RTCP 端口改为 MCS 实际 relay 端口，不再沿用主叫/对端的 4019 等原端口。
 
 不再把 `198.18.0.1` 这类 VPN fake-IP 带进 MCS 发出的 SDP。
 
