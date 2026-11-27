@@ -143,11 +143,13 @@ textarea.bc-text{margin:0 17px 12px;width:calc(100% - 34px)}
   table{min-width:620px}
 }
 .log-view{height:64vh;min-height:320px;overflow:auto;margin:0 17px 16px;background:#0b1220;border:1px solid #1b2b42;border-radius:10px;padding:8px 12px;font:12px/1.55 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:#c9d6e8}
-.log-line{display:flex;gap:9px;padding:3px 0;border-bottom:1px solid rgba(255,255,255,.045);white-space:pre-wrap;word-break:break-word}
+.log-line{display:flex;flex-wrap:wrap;align-items:flex-start;gap:3px 9px;padding:4px 0;border-bottom:1px solid rgba(255,255,255,.045);white-space:normal;word-break:normal}
 .log-time{color:#6f86a6;flex:0 0 92px;white-space:nowrap}
 .log-level{flex:0 0 44px;font-weight:700}
-.log-msg{flex:1;min-width:0}
-.log-attrs{color:#8fa6c4}
+.log-msg{flex:1 1 320px;min-width:200px;white-space:pre-wrap;overflow-wrap:anywhere}
+.log-attrs{flex:1 1 100%;color:#8fa6c4;font-size:11px;white-space:pre-wrap;overflow-wrap:anywhere}
+.log-copy{flex:0 0 auto;border:1px solid rgba(255,255,255,.18);background:transparent;color:#9fb3cc;border-radius:5px;padding:1px 6px;font-size:10px;cursor:pointer}
+.log-copy:hover{background:rgba(255,255,255,.08);color:#fff}
 .log-DEBUG .log-level{color:#8b9bb4}.log-INFO .log-level{color:#5cc8ff}
 .log-WARN .log-level{color:#f4c95d}.log-ERROR .log-level{color:#ff7b8a}
 .log-empty{color:#6f86a6;padding:16px 4px}
@@ -749,10 +751,11 @@ textarea.bc-text{margin:0 17px 12px;width:calc(100% - 34px)}
             <input type="text" id="log-filter" class="wide" placeholder="过滤关键字，例如 486、1001、b-leg" oninput="renderLogs()">
             <label class="hint"><input type="checkbox" id="log-hide-http" checked onchange="renderLogs()"> 隐藏 HTTP 轮询</label>
             <label class="hint"><input type="checkbox" id="log-pause" onchange="renderLogs()"> 暂停刷新</label>
+            <button class="btn" onclick="copyVisibleLogs()">复制当前日志</button>
             <button class="btn" onclick="clearLogs()">清空显示</button>
-            <button class="btn" onclick="downloadLogs()">下载日志</button>
+            <button class="btn" onclick="downloadLogs()">下载当前日志</button>
           </div>
-          <div class="form-note">日志保存在内存中（最近 1500 条），页面关闭后不保留；需要长期保存请下载。</div>
+          <div class="form-note">日志保存在内存中（最近 2000 条），页面关闭后不保留；可点击单行右侧“复制”，或复制当前筛选结果。多行异常文本会归一化为一行显示。</div>
           <div id="log-view" class="log-view"><div class="log-empty">正在连接日志流…</div></div>
         </div>
       </section>
@@ -2306,9 +2309,49 @@ function formatLogTime(value){
   return p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds()) + '.' + String(d.getMilliseconds()).padStart(3,'0');
 }
 
+function logDisplayValue(v){
+  return String(v ?? '').replace(/\r\n?|\n/g, ' ⏎ ').replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, '');
+}
+
 function logEntryText(e){
-  const attrs = Object.entries(e.attrs || {}).map(([k,v]) => k + '=' + v).join(' ');
-  return (e.time || '') + ' ' + (e.level || '') + ' ' + (e.message || '') + (attrs ? ' ' + attrs : '');
+  const attrs = Object.entries(e.attrs || {}).sort(([a],[b]) => a.localeCompare(b)).map(([k,v]) => k + '=' + logDisplayValue(v)).join(' ');
+  return logDisplayValue(e.time) + ' ' + logDisplayValue(e.level) + ' ' + logDisplayValue(e.message) + (attrs ? ' ' + attrs : '');
+}
+
+function filteredLogs(){
+  const level = $('log-level').value;
+  const q = ($('log-filter').value || '').trim().toLowerCase();
+  const hideHTTP = $('log-hide-http')?.checked;
+  return logBuffer.filter(e => {
+    if(level && e.level !== level) return false;
+    if(hideHTTP && /^http (GET|POST) \/api\//.test(e.message || '')) return false;
+    if(q && !logEntryText(e).toLowerCase().includes(q)) return false;
+    return true;
+  });
+}
+
+async function copyText(text){
+  if(!text) return false;
+  try{
+    if(navigator.clipboard && window.isSecureContext){ await navigator.clipboard.writeText(text); return true; }
+  }catch(e){}
+  try{
+    const ta = document.createElement('textarea');
+    ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select();
+    const ok = document.execCommand('copy'); ta.remove(); return ok;
+  }catch(e){ return false; }
+}
+
+async function copyVisibleLogs(){
+  const text = filteredLogs().map(logEntryText).join('\n');
+  const ok = await copyText(text);
+  $('log-state').textContent = ok ? '已复制当前日志' : '复制失败，请使用下载';
+}
+
+async function copyLogLine(e){
+  const ok = await copyText(logEntryText(e));
+  if(ok) $('log-state').textContent = '已复制单行日志';
 }
 
 function renderLogs(){
@@ -2318,16 +2361,9 @@ function renderLogs(){
     $('log-count').textContent = logBuffer.length + ' 条（已暂停）';
     return;
   }
-  const level = $('log-level').value;
-  const q = ($('log-filter').value || '').trim().toLowerCase();
-  const hideHTTP = $('log-hide-http')?.checked;
-  const items = logBuffer.filter(e => {
-    if(level && e.level !== level) return false;
-    if(hideHTTP && /^http (GET|POST) \/api\//.test(e.message || '')) return false;
-    if(q && !logEntryText(e).toLowerCase().includes(q)) return false;
-    return true;
-  });
+  const items = filteredLogs();
   $('log-count').textContent = items.length + '/' + logBuffer.length + ' 条';
+  const atBottom = view.scrollHeight - view.scrollTop - view.clientHeight < 40;
   view.replaceChildren();
   if(!items.length){
     const empty = document.createElement('div'); empty.className = 'log-empty';
@@ -2338,12 +2374,13 @@ function renderLogs(){
     const line = document.createElement('div'); line.className = 'log-line log-' + (e.level || 'INFO');
     const t = document.createElement('span'); t.className = 'log-time'; t.textContent = formatLogTime(e.time);
     const l = document.createElement('span'); l.className = 'log-level'; l.textContent = e.level || '';
-    const m = document.createElement('span'); m.className = 'log-msg'; m.textContent = e.message || '';
+    const m = document.createElement('span'); m.className = 'log-msg'; m.textContent = logDisplayValue(e.message);
     const a = document.createElement('span'); a.className = 'log-attrs';
-    a.textContent = Object.entries(e.attrs || {}).map(([k,v]) => k + '=' + v).join(' ');
-    line.append(t,l,m,a); view.appendChild(line);
+    a.textContent = Object.entries(e.attrs || {}).sort(([a],[b]) => a.localeCompare(b)).map(([k,v]) => k + '=' + logDisplayValue(v)).join(' ');
+    const c = document.createElement('button'); c.className = 'log-copy'; c.textContent = '复制'; c.onclick = () => copyLogLine(e);
+    line.append(t,l,m,c,a); view.appendChild(line);
   }
-  view.scrollTop = view.scrollHeight;
+  if(atBottom) view.scrollTop = view.scrollHeight;
 }
 
 function clearLogs(){
@@ -2352,7 +2389,7 @@ function clearLogs(){
 }
 
 function downloadLogs(){
-  const text = logBuffer.map(logEntryText).join('\n') + '\n';
+  const text = filteredLogs().map(logEntryText).join('\n') + '\n';
   const blob = new Blob([text], {type:'text/plain;charset=utf-8'});
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
