@@ -195,6 +195,12 @@ func (s *Server) Serve(ctx context.Context, addr string) error {
 	return s.srv.ListenAndServe(ctx, "udp", addr)
 }
 
+// ServeTCP listens for cleartext SIP over TCP.
+func (s *Server) ServeTCP(ctx context.Context, addr string) error {
+	s.log.Info("sip listening", "transport", "tcp", "addr", addr, "domain", s.domain)
+	return s.srv.ListenAndServe(ctx, "tcp", addr)
+}
+
 // ServeTLS listens for SIP over TLS using PEM cert/key files.
 func (s *Server) ServeTLS(ctx context.Context, addr, certFile, keyFile string) error {
 	cert, err := tls.LoadX509KeyPair(certFile, keyFile)

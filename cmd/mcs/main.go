@@ -184,6 +184,9 @@ func runServer(parent context.Context, configPath, logPath string, serviceMode b
 					saved.SRTPMode = cfg.Server.SRTPMode
 				}
 			}
+			if saved.Version < 4 && saved.SIPTCP == "" {
+				saved.SIPTCP = cfg.Server.SIPTCP
+			}
 			if saved.Version < 3 && len(saved.STUNURLs) == 0 && len(saved.TURNURLs) == 0 && saved.WebRTCPublicIP == "" {
 				ws := cfg.ServerSettings()
 				saved.STUNURLs = ws.STUNURLs
@@ -280,6 +283,14 @@ func runServer(parent context.Context, configPath, logPath string, serviceMode b
 			cancel()
 		}
 	}()
+	if cfg.Server.SIPTCP != "" {
+		go func() {
+			if err := sipSrv.ServeTCP(ctx, cfg.Server.SIPTCP); err != nil && ctx.Err() == nil {
+				logger.Error("sip tcp stopped", "error", err)
+				cancel()
+			}
+		}()
+	}
 	if cfg.Server.SIPTLS != "" {
 		if cfg.Server.TLSCert == "" || cfg.Server.TLSKey == "" {
 			logger.Warn("sip_tls configured without tls_cert/tls_key, TLS not started")

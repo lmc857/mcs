@@ -7,6 +7,7 @@
 | 字段 | 默认 | 说明 |
 | --- | --- | --- |
 | `sip_udp` | `0.0.0.0:5060` | SIP UDP 监听 |
+| `sip_tcp` | 空 | 可选 SIP over TCP 监听，如 `0.0.0.0:5060`；空表示关闭 |
 | `sip_tls` | 空 | 可选 SIP over TLS 监听，如 `0.0.0.0:5061` |
 | `tls_cert` | 空 | SIP TLS 证书 PEM；`sip_tls` 非空时必填 |
 | `tls_key` | 空 | SIP TLS 私钥 PEM |

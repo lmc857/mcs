@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"io"
@@ -146,6 +147,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PUT /api/v1/system/settings", s.systemSettingsSave)
 	mux.HandleFunc("POST /api/v1/system/settings/rollback", s.systemSettingsRollback)
 	mux.HandleFunc("GET /api/v1/system/interfaces", s.systemInterfaces)
+	mux.HandleFunc("POST /api/v1/system/certificates", s.systemCertificateUpload)
 	mux.HandleFunc("POST /api/v1/system/restart", s.systemRestart)
 	mux.HandleFunc("GET /api/v1/logs", s.logRecent)
 	mux.HandleFunc("GET /api/v1/logs/ws", s.logsWS)
@@ -781,7 +783,7 @@ func (s *Server) systemSettingsSave(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 400, map[string]any{"code": "VALIDATION_FAILED", "message": "invalid json"})
 		return
 	}
-	v.Version = 3
+	v.Version = 4
 	if err := config.ValidateServerSettings(v); err != nil {
 		writeJSON(w, 400, map[string]any{"code": "VALIDATION_FAILED", "message": err.Error()})
 		return
@@ -840,6 +842,83 @@ func (s *Server) systemInterfaces(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeJSON(w, 200, map[string]any{"items": items, "default": defaultIP})
+}
+
+func (s *Server) systemCertificateUpload(w http.ResponseWriter, r *http.Request) {
+	if !s.requireAdmin(w, r) {
+		return
+	}
+	if err := r.ParseMultipartForm(3 << 20); err != nil {
+		writeJSON(w, 400, map[string]any{"code": "VALIDATION_FAILED", "message": "上传内容过大或格式错误"})
+		return
+	}
+	kind := strings.TrimSpace(r.FormValue("kind"))
+	prefix := map[string]string{
+		"sip_cert": "sip-cert", "sip_key": "sip-key",
+		"https_cert": "https-cert", "https_key": "https-key", "ca": "ca",
+	}[kind]
+	if prefix == "" {
+		writeJSON(w, 400, map[string]any{"code": "VALIDATION_FAILED", "message": "未知的证书类型"})
+		return
+	}
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		writeJSON(w, 400, map[string]any{"code": "VALIDATION_FAILED", "message": "缺少文件"})
+		return
+	}
+	defer file.Close()
+	data, err := io.ReadAll(io.LimitReader(file, 2<<20+1))
+	if err != nil || len(data) == 0 {
+		writeJSON(w, 400, map[string]any{"code": "VALIDATION_FAILED", "message": "文件为空或读取失败"})
+		return
+	}
+	if len(data) > 2<<20 {
+		writeJSON(w, 400, map[string]any{"code": "VALIDATION_FAILED", "message": "证书文件不能超过 2MB"})
+		return
+	}
+	if err := validateCertificateData(kind, data); err != nil {
+		writeJSON(w, 400, map[string]any{"code": "VALIDATION_FAILED", "message": err.Error()})
+		return
+	}
+	ext := strings.ToLower(filepath.Ext(header.Filename))
+	if ext != ".pem" && ext != ".crt" && ext != ".cer" && ext != ".key" {
+		ext = ".pem"
+	}
+	dir := filepath.Join(s.dataDir, "certs")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		writeJSON(w, 500, map[string]any{"code": "INTERNAL", "message": err.Error()})
+		return
+	}
+	path := filepath.Join(dir, fmt.Sprintf("%s-%d%s", prefix, time.Now().UnixNano(), ext))
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		writeJSON(w, 500, map[string]any{"code": "INTERNAL", "message": err.Error()})
+		return
+	}
+	abs, _ := filepath.Abs(path)
+	writeJSON(w, 201, map[string]any{"status": "ok", "kind": kind, "path": abs})
+}
+
+func validateCertificateData(kind string, data []byte) error {
+	switch kind {
+	case "sip_key", "https_key":
+		block, _ := pem.Decode(data)
+		if block == nil {
+			return fmt.Errorf("私钥不是 PEM 格式")
+		}
+		if _, err := x509.ParsePKCS8PrivateKey(block.Bytes); err != nil {
+			if _, err2 := x509.ParsePKCS1PrivateKey(block.Bytes); err2 != nil {
+				if _, err3 := x509.ParseECPrivateKey(block.Bytes); err3 != nil {
+					return fmt.Errorf("私钥格式无法解析")
+				}
+			}
+		}
+	case "sip_cert", "https_cert", "ca":
+		pool := x509.NewCertPool()
+		if !pool.AppendCertsFromPEM(data) {
+			return fmt.Errorf("证书不是有效 PEM 证书")
+		}
+	}
+	return nil
 }
 
 func (s *Server) systemRestart(w http.ResponseWriter, r *http.Request) {
@@ -1281,6 +1360,7 @@ func (s *Server) ttsTest(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) info(w http.ResponseWriter, r *http.Request) {
 	total, online := s.store.Count()
+	dataDir, _ := filepath.Abs(s.dataDir)
 	writeJSON(w, 200, map[string]any{
 		"name":      "MCS",
 		"version":   s.version,
@@ -1288,6 +1368,9 @@ func (s *Server) info(w http.ResponseWriter, r *http.Request) {
 		"devices":   total,
 		"online":    online,
 		"transcode": s.sip.MediaTranscode(),
+		"platform":  runtime.GOOS,
+		"data_dir":  dataDir,
+		"cert_dir":  filepath.Join(dataDir, "certs"),
 	})
 }
 

@@ -28,6 +28,7 @@ type Config struct {
 
 type ServerConfig struct {
 	SIPUDP      string `yaml:"sip_udp"`
+	SIPTCP      string `yaml:"sip_tcp"`
 	SIPTLS      string `yaml:"sip_tls"`      // 可选，例如 0.0.0.0:5061
 	TLSCert     string `yaml:"tls_cert"`     // PEM 证书
 	TLSKey      string `yaml:"tls_key"`      // PEM 私钥

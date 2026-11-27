@@ -1,6 +1,6 @@
 # MCS API 参考（当前实现）
 
-> 适用版本：`0.13.1` 当前代码。
+> 适用版本：`0.14.0` 当前代码。
 > 文中只列 **已经实现** 的接口；规划中的接口见 [MCS-接口与数据模型.md](MCS-接口与数据模型.md)，不要直接对接规划稿。
 > 机器可读版本：[openapi.yaml](openapi.yaml)。
 
@@ -260,8 +260,8 @@ operator/admin 可操作，viewer 只读。
 ```json
 {
   "sip_tls": "0.0.0.0:5061",
-  "tls_cert": "C:/ProgramData/MCS/certs/server.crt",
-  "tls_key": "C:/ProgramData/MCS/certs/server.key",
+  "tls_cert": "/opt/mcs/data/certs/server.crt",
+  "tls_key": "/opt/mcs/data/certs/server.key",
   "tls_ca": "",
   "tls_insecure": false,
   "https": "0.0.0.0:8443",
@@ -294,6 +294,23 @@ operator/admin 可操作，viewer 只读。
 ### GET `/api/v1/system/interfaces`
 
 返回本机 IPv4 地址、网卡名、默认路由标记，用于多网段选择设备访问 IP。
+
+### POST `/api/v1/system/certificates`
+
+管理员上传证书文件，`multipart/form-data`：
+
+```text
+kind = sip_cert | sip_key | https_cert | https_key | ca
+file = 证书/私钥文件（最大 2MB）
+```
+
+返回：
+
+```json
+{"status":"ok","kind":"sip_cert","path":"/.../data/certs/sip-cert-....pem"}
+```
+
+上传只保存文件并返回路径，仍需在服务器设置中保存并重启。
 
 ### POST `/api/v1/system/restart`
 

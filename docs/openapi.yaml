@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: MCS API
-  version: 0.13.1
+  version: 0.14.0
   description: |
     MCS 报警/对讲/广播服务器当前实现接口。
     启用控制台登录后，除登录、会话、健康检查外均需 Cookie 会话。
@@ -239,6 +239,21 @@ paths:
       summary: 本机 IPv4 网卡列表
       responses:
         '200': {description: OK}
+  /api/v1/system/certificates:
+    post:
+      tags: [system]
+      summary: 上传 TLS/HTTPS 证书（admin）
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                kind: {type: string}
+                file: {type: string, format: binary}
+      responses:
+        '201': {description: 已上传}
   /api/v1/system/restart:
     post:
       tags: [system]

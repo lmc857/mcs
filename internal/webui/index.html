@@ -558,7 +558,21 @@ textarea.bc-text{margin:0 17px 12px;width:calc(100% - 34px)}
 
       <section id="tab-settings" class="tab-panel">
         <div class="panel">
+          <div class="panel-head"><h2>当前监听与能力</h2><span class="hint">以当前生效配置为准</span></div>
+          <div class="table-wrap" style="padding:0 17px 16px">
+            <table>
+              <thead><tr><th>能力</th><th>状态</th><th>监听地址 / 说明</th></tr></thead>
+              <tbody id="cap-body"><tr><td colspan="3" class="empty">加载中…</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="panel">
           <div class="panel-head"><h2>服务器设置</h2><span class="hint" id="settings-state"></span></div>
+          <div id="settings-restart-hint" class="alert" hidden style="background:#fff7ed;border-color:#fed7aa;color:#9a3412">
+            <span>配置已保存，但必须重启服务器后才生效。</span>
+            <button class="btn btn-danger btn-sm" onclick="restartServer()">立即重启</button>
+            <button class="test-btn" onclick="hideRestartHint()">稍后</button>
+          </div>
           <div class="form">
             <label class="field">设备访问 IP
               <select id="settings-advertise-ip"></select>
@@ -566,8 +580,11 @@ textarea.bc-text{margin:0 17px 12px;width:calc(100% - 34px)}
             <label class="field">SIP 端口
               <input type="text" id="settings-advertise-port" placeholder="5060">
             </label>
-            <label class="field">SIP 监听
+            <label class="field">SIP UDP 监听
               <input type="text" id="settings-sip-udp" placeholder="0.0.0.0:5060">
+            </label>
+            <label class="field">SIP TCP 监听（留空关闭）
+              <input type="text" id="settings-sip-tcp" placeholder="留空关闭">
             </label>
             <label class="field">HTTP 监听
               <input type="text" id="settings-http" placeholder="0.0.0.0:8080">
@@ -615,6 +632,19 @@ textarea.bc-text{margin:0 17px 12px;width:calc(100% - 34px)}
               </select>
             </label>
           </div>
+          <div class="form">
+            <select id="cert-kind">
+              <option value="sip_cert">SIP TLS 证书</option>
+              <option value="sip_key">SIP TLS 私钥</option>
+              <option value="https_cert">HTTPS 证书</option>
+              <option value="https_key">HTTPS 私钥</option>
+              <option value="ca">终端 CA 证书</option>
+            </select>
+            <input type="file" id="cert-file" accept=".pem,.crt,.cer,.key">
+            <button class="btn" onclick="uploadCertificate()">上传到服务器</button>
+            <span class="hint" id="cert-msg"></span>
+          </div>
+          <div class="form-note">上传成功后会自动填入对应路径；仍需点击“保存设置”并重启服务器生效。证书文件最大 2MB。</div>
           <div class="form">
             <label class="field" style="flex:1 1 48%">STUN 地址（逗号/换行分隔）
               <input type="text" id="settings-stun-urls" placeholder="stun:stun.example.com:3478">
@@ -2044,6 +2074,7 @@ async function loadServerSettings(){
     }
     $('settings-advertise-port').value = port || '5060';
     $('settings-sip-udp').value = p.sip_udp || '';
+    $('settings-sip-tcp').value = p.sip_tcp || '';
     $('settings-http').value = p.http || '';
     $('settings-https').value = p.https || '';
     $('settings-sip-tls').value = p.sip_tls || '';
@@ -2069,8 +2100,10 @@ async function loadServerSettings(){
     $('settings-hb-failures').value = p.heartbeat_failures || 3;
     $('settings-state').textContent = d.restart_required ? '有未应用修改' : '已生效';
     $('settings-msg').textContent = '';
+    if(d.restart_required) showRestartHint(); else hideRestartHint();
     const a = d.active || {};
-    $('settings-active').textContent = 'advertise=' + (a.advertise || '—') + '  http=' + (a.http || '—') + '  sip=' + (a.sip_udp || '—') + '  sip_tls=' + (a.sip_tls || 'off') + '  https=' + (a.https || 'off') + '  srtp=' + (a.srtp_mode || 'auto') + '  stun=' + ((a.stun_urls || []).length ? 'on' : 'off') + '  turn=' + ((a.turn_urls || []).length ? 'on' : 'off') + '  heartbeat=' + (a.heartbeat_enabled ? 'on' : 'off');
+    $('settings-active').textContent = 'advertise=' + (a.advertise || '—') + '  http=' + (a.http || '—') + '  sip_udp=' + (a.sip_udp || '—') + '  sip_tcp=' + (a.sip_tcp || 'off') + '  sip_tls=' + (a.sip_tls || 'off') + '  https=' + (a.https || 'off') + '  srtp=' + (a.srtp_mode || 'auto') + '  stun=' + ((a.stun_urls || []).length ? 'on' : 'off') + '  turn=' + ((a.turn_urls || []).length ? 'on' : 'off') + '  heartbeat=' + (a.heartbeat_enabled ? 'on' : 'off');
+    renderCapabilities(a);
   }catch(e){ $('settings-msg').textContent = '读取失败：' + e.message; }
 }
 
@@ -2081,6 +2114,7 @@ async function saveServerSettings(){
   const body = {
     advertise: ip + ':' + port,
     sip_udp: $('settings-sip-udp').value.trim(),
+    sip_tcp: $('settings-sip-tcp').value.trim(),
     http: $('settings-http').value.trim(),
     https: $('settings-https').value.trim(),
     sip_tls: $('settings-sip-tls').value.trim(),
@@ -2109,7 +2143,8 @@ async function saveServerSettings(){
     const res = await fetch('/api/v1/system/settings', {method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
     const d = await res.json().catch(() => ({}));
     if(!res.ok) throw new Error(d.message || ('HTTP ' + res.status));
-    $('settings-msg').textContent = d.restart_required ? '已保存，重启后生效' : '已保存';
+    $('settings-msg').textContent = d.restart_required ? '已保存，但必须重启服务器后才生效' : '已保存，已生效';
+    if(d.restart_required) showRestartHint(); else hideRestartHint();
     loadServerSettings();
   }catch(e){ $('settings-msg').textContent = '保存失败：' + e.message; }
 }
@@ -2122,6 +2157,63 @@ async function rollbackServerSettings(){
     $('settings-msg').textContent = '已恢复，重启后生效';
     loadServerSettings();
   }catch(e){ $('settings-msg').textContent = '恢复失败：' + e.message; }
+}
+
+function showRestartHint(){
+  const el = $('settings-restart-hint');
+  if(el) el.hidden = false;
+  $('settings-state').textContent = '有未应用修改';
+}
+
+function hideRestartHint(){
+  const el = $('settings-restart-hint');
+  if(el) el.hidden = true;
+}
+
+function renderCapabilities(a){
+  const tbody = $('cap-body');
+  if(!tbody) return;
+  const on = v => v ? '<span class="dot on"></span>已启用' : '<span class="dot off"></span>未启用';
+  const srtp = {auto:'自动协商', required:'必须 SRTP', off:'关闭'}[a.srtp_mode || 'auto'] || (a.srtp_mode || 'auto');
+  const stun = (a.stun_urls || []).length;
+  const turn = (a.turn_urls || []).length;
+  const rows = [
+    ['SIP UDP', a.sip_udp ? on(true) : on(false), a.sip_udp || '未配置'],
+    ['SIP TCP', a.sip_tcp ? on(true) : on(false), a.sip_tcp || '支持，当前未启用'],
+    ['SIP TLS', a.sip_tls ? on(true) : on(false), a.sip_tls || '支持，当前未启用'],
+    ['SIP 明文/加密', '—', '明文 RTP 或 SDES-SRTP；SRTP 无固定端口'],
+    ['HTTP 控制台', a.http ? on(true) : on(false), a.http || '未配置'],
+    ['HTTPS 控制台', a.https ? on(true) : on(false), a.https || '支持，当前未启用'],
+    ['RTP / RTCP', '动态 UDP', '每个通话/广播分配，无固定端口范围'],
+    ['SRTP', '<span class="badge">' + esc(srtp) + '</span>', '媒体加密跟随 SDP 协商，无单独端口'],
+    ['WebRTC ICE', (stun || turn) ? '<span class="dot on"></span>已配置' : '<span class="dot off"></span>仅 host', 'STUN ' + stun + ' 条 / TURN ' + turn + ' 条'],
+    ['TURN 服务', turn ? '<span class="dot on"></span>外部' : '<span class="dot off"></span>未配置', turn ? '外部 coturn（MCS 不内置）' : '跨 NAT 需部署外部 TURN']
+  ];
+  tbody.innerHTML = rows.map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td><td class="mono">${r[2]}</td></tr>`).join('');
+}
+
+async function uploadCertificate(){
+  const file = $('cert-file').files[0];
+  const kind = $('cert-kind').value;
+  if(!file){ $('cert-msg').textContent = '请选择证书文件'; return; }
+  if(file.size > 2*1024*1024){ $('cert-msg').textContent = '文件不能超过 2MB'; return; }
+  const fd = new FormData();
+  fd.append('kind', kind);
+  fd.append('file', file);
+  $('cert-msg').textContent = '正在上传…';
+  try{
+    const res = await fetch('/api/v1/system/certificates', {method:'POST', body: fd});
+    const d = await res.json().catch(() => ({}));
+    if(!res.ok) throw new Error(d.message || ('HTTP ' + res.status));
+    const target = {
+      sip_cert: 'settings-tls-cert', sip_key: 'settings-tls-key',
+      https_cert: 'settings-https-cert', https_key: 'settings-https-key', ca: 'settings-tls-ca'
+    }[kind];
+    if(target) $(target).value = d.path || '';
+    $('cert-file').value = '';
+    $('cert-msg').textContent = '已上传并填入路径，请保存设置后重启';
+    $('settings-state').textContent = '有未保存修改';
+  }catch(e){ $('cert-msg').textContent = '上传失败：' + e.message; }
 }
 
 async function restartServer(){
@@ -2288,6 +2380,16 @@ async function loadSystemInfo(){
     set('sys-devices', info.devices ?? '—');
     set('sys-online', info.online ?? '—');
     set('sys-transcode', info.transcode ? '已开启（兼容模式）' : '关闭（默认）');
+    const certDir = info.cert_dir || '';
+    if(certDir){
+      const sep = info.platform === 'windows' ? '\\' : '/';
+      const ph = (id, name) => { const el = $(id); if(el && !el.value) el.placeholder = certDir + sep + name; };
+      ph('settings-tls-cert', 'server.crt');
+      ph('settings-tls-key', 'server.key');
+      ph('settings-tls-ca', 'phone-ca.crt');
+      ph('settings-https-cert', 'console.crt');
+      ph('settings-https-key', 'console.key');
+    }
     set('ov-devices', info.devices ?? '—');
     set('ov-online', info.online ?? '—');
   }catch(e){}

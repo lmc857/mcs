@@ -1,7 +1,7 @@
 # MCS · 报警 / 对讲 / 广播融合通信服务器
 
 > 产品代号 **MCS**（暂定）。面向报警运营、园区、校园、医院、工地等场景的私有化通信服务器。
-> 当前版本：**0.13.1**。注册/呼叫/录音/报警升级/广播/对讲视频·开锁·抓拍/WebRTC/授权/网页分区/TLS/SRTP 已打通。
+> 当前版本：**0.14.0**。注册/呼叫/录音/报警升级/广播/对讲视频·开锁·抓拍/WebRTC/授权/网页分区/TLS/SRTP 已打通。
 
 ## 文档
 
@@ -13,7 +13,7 @@
 | [授权管理](docs/MCS-授权管理.md) | 激活码、话机数量限制、试用授权、签发工具 |
 | [部署与运维手册](docs/MCS-使用手册.md) | 安装、TLS/SRTP、端口目录、运维、技术排障 |
 | [API 参考](docs/MCS-API参考.md) | 当前已实现的 REST / WebSocket 接口 |
-| [OpenAPI](docs/openapi.yaml) | 机器可读的 OpenAPI 3 规范（51 个路径） |
+| [OpenAPI](docs/openapi.yaml) | 机器可读的 OpenAPI 3 规范（52 个路径） |
 | [测试与兼容性](docs/MCS-测试与兼容性.md) | 自动化覆盖、已验证环境、终端兼容边界 |
 | [真机测试指南](docs/MCS-真机测试指南.md) | LAN 拓扑、终端配置、测试用例、抓包排查 |
 | [广播终端接入](docs/MCS-广播终端接入.md) | 广播协议、Alert-Info、SDP、单播/组播终端要求 |
@@ -47,6 +47,7 @@
 | SRTP（SDES） | ✅ 音频/视频，AES_CM_128_HMAC_SHA1_80/32，按腿独立密钥 |
 | 设备管理 | ✅ Web 新增/编辑/删除设备，可修改 SIP 密码；SQLite 持久化 |
 | 控制台登录 | ✅ Cookie 会话 + bcrypt，admin/operator/viewer |
+| 运维体验 | ✅ 当前监听/能力面板、证书上传、重启待生效提示、跨平台证书路径 |
 | M1 安装 | ✅ Linux systemd / Windows 原生 Service / Inno Setup 安装包 |
 | 广播 / TTS | ✅ 分区、优先级抢占、单播/组播、自动应答、逐终端状态；支持 PCMU/Opus、网页分区管理 |
 | 电话会议 | ✅ 8 方 PCMU/PCMA 混音、网页建房/停用/删除、静音/踢出、混音录音 |

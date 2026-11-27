@@ -3,6 +3,7 @@ server:
   # SIP 监听地址；生产用 0.0.0.0:5060
   sip_udp: "0.0.0.0:5060"
   # 可选 SIP over TLS；证书/私钥用 PEM
+  # sip_tcp: "0.0.0.0:5060"   # 可选 SIP over TCP
   # sip_tls: "0.0.0.0:5061"
   # tls_cert: "/etc/mcs/tls/server.crt"
   # tls_key: "/etc/mcs/tls/server.key"

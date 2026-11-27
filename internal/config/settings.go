@@ -14,6 +14,7 @@ type ServerSettings struct {
 	Version            int      `json:"settings_version,omitempty"`
 	Advertise          string   `json:"advertise"`
 	SIPUDP             string   `json:"sip_udp"`
+	SIPTCP             string   `json:"sip_tcp"`
 	HTTP               string   `json:"http"`
 	HTTPS              string   `json:"https"`
 	SIPTLS             string   `json:"sip_tls"`
@@ -59,9 +60,10 @@ func (c Config) ServerSettings() ServerSettings {
 		}
 	}
 	return ServerSettings{
-		Version:        3,
+		Version:        4,
 		Advertise:      c.Server.Advertise,
 		SIPUDP:         c.Server.SIPUDP,
+		SIPTCP:         c.Server.SIPTCP,
 		HTTP:           c.Server.HTTP,
 		HTTPS:          c.Server.HTTPS,
 		SIPTLS:         c.Server.SIPTLS,
@@ -93,6 +95,7 @@ func (c *Config) ApplyServerSettings(v ServerSettings) error {
 	}
 	c.Server.Advertise = v.Advertise
 	c.Server.SIPUDP = v.SIPUDP
+	c.Server.SIPTCP = v.SIPTCP
 	c.Server.HTTP = v.HTTP
 	c.Server.HTTPS = v.HTTPS
 	c.Server.SIPTLS = v.SIPTLS
@@ -140,7 +143,7 @@ func (v ServerSettings) Equal(w ServerSettings) bool {
 	v.TURNURLs = append([]string(nil), v.TURNURLs...)
 	w.TURNURLs = append([]string(nil), w.TURNURLs...)
 	return v.Version == w.Version &&
-		v.Advertise == w.Advertise && v.SIPUDP == w.SIPUDP && v.HTTP == w.HTTP &&
+		v.Advertise == w.Advertise && v.SIPUDP == w.SIPUDP && v.SIPTCP == w.SIPTCP && v.HTTP == w.HTTP &&
 		v.HTTPS == w.HTTPS && v.SIPTLS == w.SIPTLS && v.TLSCert == w.TLSCert &&
 		v.TLSKey == w.TLSKey && v.TLSCA == w.TLSCA && v.TLSInsecure == w.TLSInsecure &&
 		v.HTTPSCert == w.HTTPSCert && v.HTTPSKey == w.HTTPSKey && v.SRTPMode == w.SRTPMode &&
@@ -157,6 +160,9 @@ func ValidateServerSettings(v ServerSettings) error {
 		return err
 	}
 	if err := validateHostPort("sip_udp", v.SIPUDP, false, false); err != nil {
+		return err
+	}
+	if err := validateHostPort("sip_tcp", v.SIPTCP, true, false); err != nil {
 		return err
 	}
 	if err := validateHostPort("http", v.HTTP, false, false); err != nil {

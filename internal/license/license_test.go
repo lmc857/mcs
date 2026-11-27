@@ -51,7 +51,7 @@ func TestActivationExpiry(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	now := time.Date(2026, 11, 24, 10, 0, 0, 0, time.UTC)
+	now := time.Now().UTC()
 	m := New(pub, 4, "MCS-TEST-DEVICE-0002")
 	m.now = func() time.Time { return now }
 	code, err := Encode(Payload{

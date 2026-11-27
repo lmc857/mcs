@@ -50,7 +50,7 @@ body { margin:0; color:var(--ink); font-family:"PingFang SC","Microsoft YaHei","
   <div class="kicker">报警 · 对讲 · 广播融合通信服务器</div>
   <h1>MCS 用户<br>使用手册</h1>
   <div class="rule"></div>
-  <div class="meta">适用版本：MCS 0.13.1<br>文档版本：2026-11-23<br>适用对象：值班人员、操作员、系统管理员</div>
+  <div class="meta">适用版本：MCS 0.14.0<br>文档版本：2026-11-23<br>适用对象：值班人员、操作员、系统管理员</div>
   <div class="foot">覆盖设备、报警、对讲、广播、寻呼、会议、系统设置与运维。<br>请结合实际网络、分区和设备配置使用。</div>
 </section>
 <nav class="toc">
@@ -850,13 +850,25 @@ MCS 按报警级别依次呼叫值班目标
 <p>进入：</p>
 <pre><code class="language-text">配置 → 系统设置
 </code></pre>
+<p>页面顶部先显示“当前监听与能力”：</p>
+<ul>
+<li>SIP UDP / SIP TCP / SIP TLS 是否启用及地址；</li>
+<li>HTTP / HTTPS 控制台地址；</li>
+<li>RTP/RTCP 为动态 UDP；</li>
+<li>SRTP 当前模式；</li>
+<li>WebRTC ICE 的 STUN/TURN 配置；</li>
+<li>TURN 是否为外部服务。</li>
+</ul>
 <p>可配置：</p>
 <ul>
 <li>设备访问 IP；</li>
 <li>SIP 端口；</li>
-<li>SIP 监听地址；</li>
-<li>HTTP 监听地址；</li>
-<li>HTTPS 监听地址；</li>
+<li>SIP UDP、SIP TCP、SIP TLS 监听地址；</li>
+<li>HTTP、HTTPS 监听地址；</li>
+<li>TLS/HTTPS 证书和私钥；</li>
+<li>终端 CA；</li>
+<li>SRTP 模式；</li>
+<li>STUN/TURN；</li>
 <li>SIP 域名；</li>
 <li>报警号码；</li>
 <li>G.711 转码；</li>
@@ -864,7 +876,15 @@ MCS 按报警级别依次呼叫值班目标
 <li>SIP OPTIONS 心跳；</li>
 <li>心跳间隔、超时、失败次数。</li>
 </ul>
-<p>保存后需要重启生效。</p>
+<p>证书可以直接上传：</p>
+<pre><code class="language-text">选择类型 → 选择文件 → 上传到服务器
+</code></pre>
+<p>上传后自动填入对应路径，再点击“保存设置”。</p>
+<p>保存后如果配置有变化，页面顶部会显示橙色提示：</p>
+<pre><code class="language-text">配置已保存，但必须重启服务器后才生效。
+</code></pre>
+<p>可以点“立即重启”或“稍后”。</p>
+<p>证书路径输入框的默认提示会按当前操作系统和数据目录显示，不再固定显示 Windows 路径。</p>
 <p><img src="images/console-settings.png" alt="系统设置"></p>
 <h3>10.2 设备访问 IP</h3>
 <p>“设备访问 IP”是写进 SIP 消息和 SDP 的 MCS 地址。</p>
