@@ -187,6 +187,9 @@ func runServer(parent context.Context, configPath, logPath string, serviceMode b
 			if saved.Version < 4 && saved.SIPTCP == "" {
 				saved.SIPTCP = cfg.Server.SIPTCP
 			}
+			if saved.Version < 5 && saved.AuthRealm == "" {
+				saved.AuthRealm = cfg.Auth.Realm
+			}
 			if saved.Version < 3 && len(saved.STUNURLs) == 0 && len(saved.TURNURLs) == 0 && saved.WebRTCPublicIP == "" {
 				ws := cfg.ServerSettings()
 				saved.STUNURLs = ws.STUNURLs

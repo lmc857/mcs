@@ -74,7 +74,7 @@ data/
 
 | 字段 | 默认 | 说明 |
 | --- | --- | --- |
-| `realm` | `mcs` | SIP Digest Realm |
+| `realm` | `mcs` | SIP Digest Realm；话机认证域必须一致，可在网页“SIP 认证 Realm”修改 |
 | `secret` | 空 | Digest nonce 密钥；空则每次启动随机 |
 | `console_user` | `admin`（密码非空时） | 控制台用户名 |
 | `console_password` | 空 | 非空启用 Cookie 登录；生产必须设置 |

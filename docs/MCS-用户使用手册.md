@@ -1,6 +1,6 @@
 # MCS 用户使用手册
 
-**适用版本：MCS 0.14.1**  
+**适用版本：MCS 0.14.2**  
 **文档版本：2026-11-23**
 
 ---
@@ -1138,6 +1138,44 @@ C:\ProgramData\MCS\data\initial-admin.txt
 - 传输协议；
 - 防火墙 UDP 5060；
 - 设备是否在 MCS 设备列表中。
+
+### 17.2.1 注册认证失败
+
+日志出现：
+
+```text
+register auth failed
+ext=1003 source=...
+```
+
+说明 TLS/网络已经通了，问题在 SIP Digest 账号认证，不是 CA 证书。
+
+按顺序检查：
+
+1. MCS 设备管理中的 SIP 密码和话机密码是否一致；
+2. 是否刚改过设备密码，话机是否仍用旧密码；
+3. 话机的认证 Realm/SIP 域是否和 MCS“SIP 认证 Realm”一致；
+4. 话机用户名是否只填 `1003`，不是 `1003@mcs.local`；
+5. 话机注册 URI/域名是否和 MCS 的 SIP 域名一致；
+6. 密码是否包含空格、特殊字符或输入错误；
+7. MCS 重启后 `auth.secret` 是否为空导致 nonce 失效，重新注册即可。
+
+MCS 新增的失败日志会显示：
+
+```text
+auth_user=1003 auth_realm=mcs.local auth_uri=...
+request_uri=... expected_realm=mcs
+```
+
+如果 `auth_realm` 和 `expected_realm` 不一致，就是 Realm 配错。
+
+系统设置新增：
+
+```text
+SIP 认证 Realm
+```
+
+默认是 `mcs`。话机中的认证 Realm 必须和它一致，修改后需要重启 MCS。
 
 ### 17.3 能接通但没有声音
 

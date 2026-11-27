@@ -20,6 +20,7 @@
 - SIP UDP/TCP/TLS 监听地址；
 - HTTP/HTTPS 监听地址；
 - SIP 域名；
+- SIP 认证 Realm（默认 `mcs`，必须与话机认证域一致）；
 - 报警号码；
 - Alert-Info 自动应答头；
 - G.711 转码开关；

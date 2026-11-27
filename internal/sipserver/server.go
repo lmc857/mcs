@@ -244,7 +244,12 @@ func (s *Server) onRegister(req *sip.Request, tx sip.ServerTransaction) {
 		return
 	}
 	if !s.auth.Verify(authHeader.Value(), req.Method.String(), req.Recipient.String(), ext, password) {
-		s.log.Warn("register auth failed", "ext", ext, "source", req.Source())
+		ap := ParseAuthorization(authHeader.Value())
+		s.log.Warn("register auth failed",
+			"ext", ext, "source", req.Source(),
+			"auth_user", ap["username"], "auth_realm", ap["realm"],
+			"auth_uri", ap["uri"], "request_uri", req.Recipient.String(),
+			"auth_algorithm", ap["algorithm"], "auth_qop", ap["qop"], "expected_realm", s.auth.Realm)
 		s.challenge(req, tx)
 		return
 	}

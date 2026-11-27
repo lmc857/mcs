@@ -783,7 +783,10 @@ func (s *Server) systemSettingsSave(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 400, map[string]any{"code": "VALIDATION_FAILED", "message": "invalid json"})
 		return
 	}
-	v.Version = 4
+	v.Version = 5
+	if v.AuthRealm == "" {
+		v.AuthRealm = "mcs"
+	}
 	if err := config.ValidateServerSettings(v); err != nil {
 		writeJSON(w, 400, map[string]any{"code": "VALIDATION_FAILED", "message": err.Error()})
 		return

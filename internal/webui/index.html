@@ -602,6 +602,9 @@ textarea.bc-text{margin:0 17px 12px;width:calc(100% - 34px)}
             <label class="field">SIP 域名
               <input type="text" id="settings-domain" placeholder="mcs.local">
             </label>
+            <label class="field">SIP 认证 Realm
+              <input type="text" id="settings-auth-realm" placeholder="mcs">
+            </label>
             <label class="field">报警号码
               <input type="text" id="settings-alarm" placeholder="8000">
             </label>
@@ -690,6 +693,7 @@ textarea.bc-text{margin:0 17px 12px;width:calc(100% - 34px)}
           <div class="form-note">
             保存后需重启生效；重启会中断通话和广播。监听地址只填写当前服务器实际使用的地址，多网段时请选择设备所在网卡的 IP。<br>
             STUN/TURN 使用标准服务器（推荐 coturn），MCS 只作为 ICE 客户端；TURN 密码会下发给登录后的浏览器。<br>
+            SIP 认证 Realm 默认是 mcs；话机里的认证域/Realm 必须和这里一致，否则会返回 401/认证失败。<br>
             当前生效：<span id="settings-active" class="mono"></span>
           </div>
         </div>
@@ -2108,6 +2112,7 @@ async function loadServerSettings(){
     $('settings-turn-pass').value = '';
     $('settings-webrtc-public-ip').value = p.webrtc_public_ip || '';
     $('settings-domain').value = p.domain || '';
+    $('settings-auth-realm').value = p.auth_realm || 'mcs';
     $('settings-alarm').value = p.alarm_number || '';
     $('settings-auto-answer').value = p.auto_answer || '';
     $('settings-transcode').checked = !!p.transcode;
@@ -2119,7 +2124,7 @@ async function loadServerSettings(){
     $('settings-msg').textContent = '';
     if(d.restart_required) showRestartHint(); else hideRestartHint();
     const a = d.active || {};
-    $('settings-active').textContent = 'advertise=' + (a.advertise || '—') + '  http=' + (a.http || '—') + '  sip_udp=' + (a.sip_udp || '—') + '  sip_tcp=' + (a.sip_tcp || 'off') + '  sip_tls=' + (a.sip_tls || 'off') + '  https=' + (a.https || 'off') + '  srtp=' + (a.srtp_mode || 'auto') + '  stun=' + ((a.stun_urls || []).length ? 'on' : 'off') + '  turn=' + ((a.turn_urls || []).length ? 'on' : 'off') + '  heartbeat=' + (a.heartbeat_enabled ? 'on' : 'off');
+    $('settings-active').textContent = 'advertise=' + (a.advertise || '—') + '  http=' + (a.http || '—') + '  sip_udp=' + (a.sip_udp || '—') + '  sip_tcp=' + (a.sip_tcp || 'off') + '  sip_tls=' + (a.sip_tls || 'off') + '  realm=' + (a.auth_realm || 'mcs') + '  https=' + (a.https || 'off') + '  srtp=' + (a.srtp_mode || 'auto') + '  stun=' + ((a.stun_urls || []).length ? 'on' : 'off') + '  turn=' + ((a.turn_urls || []).length ? 'on' : 'off') + '  heartbeat=' + (a.heartbeat_enabled ? 'on' : 'off');
     renderCapabilities(a);
   }catch(e){ $('settings-msg').textContent = '读取失败：' + e.message; }
 }
@@ -2148,6 +2153,7 @@ async function saveServerSettings(){
     turn_password: $('settings-turn-pass').value || (serverSettings && (serverSettings.pending || serverSettings.active) || {}).turn_password || '',
     webrtc_public_ip: $('settings-webrtc-public-ip').value.trim(),
     domain: $('settings-domain').value.trim(),
+    auth_realm: $('settings-auth-realm').value.trim() || 'mcs',
     alarm_number: $('settings-alarm').value.trim(),
     auto_answer: $('settings-auto-answer').value.trim(),
     transcode: $('settings-transcode').checked,

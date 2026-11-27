@@ -31,6 +31,7 @@ type ServerSettings struct {
 	TURNPassword       string   `json:"turn_password"`
 	WebRTCPublicIP     string   `json:"webrtc_public_ip"`
 	Domain             string   `json:"domain"`
+	AuthRealm          string   `json:"auth_realm"`
 	AlarmNumber        string   `json:"alarm_number"`
 	AutoAnswer         string   `json:"auto_answer"`
 	Transcode          bool     `json:"transcode"`
@@ -59,8 +60,12 @@ func (c Config) ServerSettings() ServerSettings {
 			}
 		}
 	}
+	realm := c.Auth.Realm
+	if realm == "" {
+		realm = "mcs"
+	}
 	return ServerSettings{
-		Version:        4,
+		Version:        5,
 		Advertise:      c.Server.Advertise,
 		SIPUDP:         c.Server.SIPUDP,
 		SIPTCP:         c.Server.SIPTCP,
@@ -80,6 +85,7 @@ func (c Config) ServerSettings() ServerSettings {
 		TURNPassword:   turnPass,
 		WebRTCPublicIP: c.WebRTC.PublicIP,
 		Domain:         c.Server.Domain,
+		AuthRealm:      realm,
 		AlarmNumber:    c.Alarm.Number,
 		AutoAnswer:     c.Broadcast.AutoAnswer,
 		Transcode:      c.Media.Transcode,
@@ -147,7 +153,7 @@ func (v ServerSettings) Equal(w ServerSettings) bool {
 		v.HTTPS == w.HTTPS && v.SIPTLS == w.SIPTLS && v.TLSCert == w.TLSCert &&
 		v.TLSKey == w.TLSKey && v.TLSCA == w.TLSCA && v.TLSInsecure == w.TLSInsecure &&
 		v.HTTPSCert == w.HTTPSCert && v.HTTPSKey == w.HTTPSKey && v.SRTPMode == w.SRTPMode &&
-		v.Domain == w.Domain && v.AlarmNumber == w.AlarmNumber && v.AutoAnswer == w.AutoAnswer &&
+		v.Domain == w.Domain && v.AuthRealm == w.AuthRealm && v.AlarmNumber == w.AlarmNumber && v.AutoAnswer == w.AutoAnswer &&
 		v.Transcode == w.Transcode && v.HeartbeatEnabled == w.HeartbeatEnabled &&
 		v.HeartbeatIntervalS == w.HeartbeatIntervalS && v.HeartbeatTimeoutS == w.HeartbeatTimeoutS &&
 		v.HeartbeatFailures == w.HeartbeatFailures && slices.Equal(v.STUNURLs, w.STUNURLs) &&
@@ -204,6 +210,12 @@ func ValidateServerSettings(v ServerSettings) error {
 	}
 	if strings.TrimSpace(v.Domain) == "" {
 		return fmt.Errorf("domain 不能为空")
+	}
+	if strings.TrimSpace(v.AuthRealm) == "" {
+		v.AuthRealm = "mcs"
+	}
+	if strings.ContainsAny(v.AuthRealm, " \t\r\n") {
+		return fmt.Errorf("auth_realm 不能包含空白")
 	}
 	if strings.TrimSpace(v.AlarmNumber) == "" {
 		return fmt.Errorf("报警号码不能为空")

@@ -1,12 +1,26 @@
 # MCS 更新说明
 
-> 当前版本：**0.14.1**
+> 当前版本：**0.14.2**
 > 更新日期：2026-11-27
 > 适用：Windows 服务版、Linux 手动部署、源码部署
 
 本文记录近期已交付的功能、升级注意事项和当前边界。详细操作见
 [用户使用手册](MCS-用户使用手册.pdf)、[部署与运维手册](MCS-使用手册.md)、
 [API 参考](MCS-API参考.md) 和 [架构说明](MCS-架构说明.md)。
+
+## 0.14.2：SIP 认证排查
+
+- `register auth failed` 日志新增认证诊断字段：
+  - `auth_user`
+  - `auth_realm`
+  - `auth_uri`
+  - `request_uri`
+  - `auth_algorithm`
+  - `auth_qop`
+  - `expected_realm`
+- 系统设置新增“SIP 认证 Realm”，默认 `mcs`；
+- 话机认证 Realm 与 MCS 不一致时，可直接在网页修改并对齐；
+- 文档补充注册认证失败排查。
 
 ## 0.14.1：版本号显示
 
@@ -325,6 +339,7 @@ systemctl start mcs
 
 | 版本 | 主要内容 |
 | --- | --- |
+| 0.14.2 | SIP 认证日志、认证 Realm 网页配置 |
 | 0.14.1 | 版本号顶栏/侧边栏/登录框显示 |
 | 0.14.0 | SIP TCP、能力面板、证书上传、跨平台路径、重启提示 |
 | 0.13.1 | 设备编辑与 SIP 密码修改，改密强制重新注册 |
@@ -341,7 +356,7 @@ Windows 0.14.0 包：
 
 ```text
 dist/MCS-Windows-Build-0.14.0.zip
-SHA-256: 3f3990883dcfb6dd869d79f5d740be927cd335769013db89d81e6d4f3bb2890c
+SHA-256: b79ee46a64322202b72c0174bb9c543881660597fda58f2bf44a12f8d86b2ba2
 ```
 
 > 安装包和二进制属于构建产物，不在 Git 仓库中；源码提交以仓库 `main` 分支为准。
