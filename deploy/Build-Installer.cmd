@@ -3,7 +3,7 @@ setlocal EnableExtensions
 title Build MCS Installer
 cd /d "%~dp0"
 set "VERSION=%~1"
-if "%VERSION%"=="" set "VERSION=0.14.3"
+if "%VERSION%"=="" set "VERSION=0.14.4"
 
 echo ============================================
 echo  MCS Installer Builder

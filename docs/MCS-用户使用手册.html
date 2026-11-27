@@ -50,7 +50,7 @@ body { margin:0; color:var(--ink); font-family:"PingFang SC","Microsoft YaHei","
   <div class="kicker">报警 · 对讲 · 广播融合通信服务器</div>
   <h1>MCS 用户<br>使用手册</h1>
   <div class="rule"></div>
-  <div class="meta">适用版本：MCS 0.14.3<br>文档版本：2026-11-23<br>适用对象：值班人员、操作员、系统管理员</div>
+  <div class="meta">适用版本：MCS 0.14.4<br>文档版本：2026-11-23<br>适用对象：值班人员、操作员、系统管理员</div>
   <div class="foot">覆盖设备、报警、对讲、广播、寻呼、会议、系统设置与运维。<br>请结合实际网络、分区和设备配置使用。</div>
 </section>
 <nav class="toc">
@@ -1169,6 +1169,46 @@ request_uri=... expected_realm=mcs
 <pre><code class="language-text">SIP 认证 Realm
 </code></pre>
 <p>默认是 <code>mcs</code>。话机中的认证 Realm 必须和它一致，修改后需要重启 MCS。</p>
+<h3>17.2.2 呼叫返回 480</h3>
+<p>0.14.4 起，MCS 会保留 B 腿的真实 SIP 失败码，不再全部改成 480。</p>
+<p>查看“实时日志”：</p>
+<pre><code class="language-text">b-leg response ... code=488
+call rejected ... code=488 b_leg_code=488 b_leg_reason=Not Acceptable Here
+</code></pre>
+<p>常见：</p>
+<table>
+<thead>
+<tr>
+<th>B 腿结果</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>486</td>
+<td>被叫忙</td>
+</tr>
+<tr>
+<td>488</td>
+<td>SDP/媒体不兼容，例如 SRTP、编码、视频参数</td>
+</tr>
+<tr>
+<td>603</td>
+<td>被叫拒接</td>
+</tr>
+<tr>
+<td>404</td>
+<td>被叫不存在</td>
+</tr>
+<tr>
+<td>480</td>
+<td>无人接听/不可达</td>
+</tr>
+<tr>
+<td>b_leg_error=TLS...</td>
+<td>MCS 到被叫的 TLS 连接失败</td>
+</tr>
+</tbody></table>
+<p>如果 <code>b_leg_error</code> 包含 TLS 握手错误，检查被叫的 SIP TLS 证书、端口和传输方式，不是主叫的 CA 问题。</p>
 <h3>17.3 能接通但没有声音</h3>
 <p>检查：</p>
 <ul>

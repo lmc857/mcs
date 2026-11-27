@@ -446,3 +446,25 @@ func TestMediaIPForSource(t *testing.T) {
 		t.Fatalf("loopback = %q", got)
 	}
 }
+
+func TestFailureResultPreservesBlegStatus(t *testing.T) {
+	c := &call{ctx: context.Background()}
+	err := &sipgo.ErrDialogResponse{Res: sip.NewResponse(488, "Not Acceptable Here")}
+	if got := c.failureResult(err, context.Background()); got != "failed" {
+		t.Fatalf("result = %q", got)
+	}
+	if c.lastCode != 488 || c.lastReason != "Not Acceptable Here" {
+		t.Fatalf("last response = %d %q", c.lastCode, c.lastReason)
+	}
+}
+
+func TestFailureResultMapsBusy(t *testing.T) {
+	c := &call{ctx: context.Background()}
+	err := &sipgo.ErrDialogResponse{Res: sip.NewResponse(486, "Busy Here")}
+	if got := c.failureResult(err, context.Background()); got != "busy" {
+		t.Fatalf("result = %q", got)
+	}
+	if c.lastCode != 486 {
+		t.Fatalf("last code = %d", c.lastCode)
+	}
+}

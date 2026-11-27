@@ -34,35 +34,38 @@ type alarmTarget struct {
 }
 
 type call struct {
-	id       string
-	aCallID  string
-	bCallID  string
-	from     string
-	to       string
-	a        *sipgo.DialogServerSession
-	b        *sipgo.DialogClientSession
-	relayA   *relay
-	relayB   *relay
-	videoA   *relay
-	videoB   *relay
-	audioTap *mediaTap
-	videoTap *mediaTap
-	rec      *recorder
-	codecA   string
-	codecB   string
-	audioPT  uint8
-	startAt  time.Time
-	answerAt time.Time
-	result   string
-	targets  []alarmTarget
-	attempt  int
-	level    int
-	alarmID  string
-	ctx      context.Context
-	cancel   context.CancelFunc
-	once     sync.Once
-	stateMu  sync.RWMutex
-	server   *Server
+	id         string
+	aCallID    string
+	bCallID    string
+	from       string
+	to         string
+	a          *sipgo.DialogServerSession
+	b          *sipgo.DialogClientSession
+	relayA     *relay
+	relayB     *relay
+	videoA     *relay
+	videoB     *relay
+	audioTap   *mediaTap
+	videoTap   *mediaTap
+	rec        *recorder
+	codecA     string
+	codecB     string
+	audioPT    uint8
+	startAt    time.Time
+	answerAt   time.Time
+	result     string
+	lastCode   int
+	lastReason string
+	lastError  string
+	targets    []alarmTarget
+	attempt    int
+	level      int
+	alarmID    string
+	ctx        context.Context
+	cancel     context.CancelFunc
+	once       sync.Once
+	stateMu    sync.RWMutex
+	server     *Server
 }
 
 type callRegistry struct {
@@ -301,14 +304,29 @@ func (s *Server) bridge(c *call, offer sdpInfo) {
 		}
 	}
 
+	c.stateMu.RLock()
+	lastCode, lastReason, lastError := c.lastCode, c.lastReason, c.lastError
+	c.stateMu.RUnlock()
 	code, reason := 480, "Temporarily Unavailable"
+	if lastCode > 0 {
+		code, reason = lastCode, lastReason
+	}
+	if code == 401 || code == 407 {
+		// The B-leg challenge is between MCS and the callee, not the caller.
+		code, reason = 480, "Temporarily Unavailable"
+	}
 	if result == "busy" {
 		code, reason = 486, "Busy Here"
+	}
+	if reason == "" {
+		reason = "Temporarily Unavailable"
 	}
 	if c.ctx.Err() == nil {
 		_ = c.a.Respond(code, reason, nil)
 	}
-	s.log.Info("call rejected", "call_id", c.id, "from", c.from, "to", c.to, "result", result, "code", code, "reason", reason, "targets", len(c.targets))
+	s.log.Info("call rejected", "call_id", c.id, "from", c.from, "to", c.to, "result", result,
+		"code", code, "reason", reason, "targets", len(c.targets),
+		"b_leg_code", lastCode, "b_leg_reason", lastReason, "b_leg_error", lastError)
 	c.finish(result)
 }
 
@@ -453,6 +471,11 @@ func (c *call) tryTarget(t alarmTarget, offer sdpInfo) (bool, string) {
 				return nil
 			}
 			s.log.Info("b-leg response", "call_id", c.id, "to", t.view.Ext, "code", res.StatusCode, "reason", res.Reason)
+			if !res.IsProvisional() {
+				c.stateMu.Lock()
+				c.lastCode, c.lastReason = res.StatusCode, res.Reason
+				c.stateMu.Unlock()
+			}
 			if res.IsProvisional() {
 				body := res.Body()
 				if len(body) > 0 {
@@ -662,9 +685,18 @@ func (c *call) failureResult(err error, ctx context.Context) string {
 	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 		return "no_answer"
 	}
+	if err != nil {
+		c.stateMu.Lock()
+		c.lastError = err.Error()
+		c.stateMu.Unlock()
+	}
 	var dialogErr *sipgo.ErrDialogResponse
 	if errors.As(err, &dialogErr) && dialogErr.Res != nil {
-		switch dialogErr.Res.StatusCode {
+		code, reason := dialogErr.Res.StatusCode, dialogErr.Res.Reason
+		c.stateMu.Lock()
+		c.lastCode, c.lastReason = code, reason
+		c.stateMu.Unlock()
+		switch code {
 		case 486, 600:
 			return "busy"
 		case 408, 480:
