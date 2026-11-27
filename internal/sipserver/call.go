@@ -334,18 +334,18 @@ func (c *call) tryTarget(t alarmTarget, offer sdpInfo) (bool, string) {
 	s := c.server
 	ra, err := newRelay()
 	if err != nil {
-		return false, "failed"
+		return c.localFailure(t, "rtp-relay-a", err)
 	}
 	rb, err := newRelay()
 	if err != nil {
 		ra.close()
-		return false, "failed"
+		return c.localFailure(t, "rtp-relay-b", err)
 	}
 	rec, err := newRecorder(s.dataDir, c.id)
 	if err != nil {
 		ra.close()
 		rb.close()
-		return false, "failed"
+		return c.localFailure(t, "recorder", err)
 	}
 	c.relayA, c.relayB, c.rec = ra, rb, rec
 	ra.transcode = s.mediaTranscode
@@ -363,13 +363,13 @@ func (c *call) tryTarget(t alarmTarget, offer sdpInfo) (bool, string) {
 		va, err = newRelay()
 		if err != nil {
 			c.cleanupAttempt()
-			return false, "failed"
+			return c.localFailure(t, "rtp-relay-video-a", err)
 		}
 		vb, err = newRelay()
 		if err != nil {
 			va.close()
 			c.cleanupAttempt()
-			return false, "failed"
+			return c.localFailure(t, "rtp-relay-video-b", err)
 		}
 		c.videoA, c.videoB = va, vb
 	}
@@ -384,29 +384,29 @@ func (c *call) tryTarget(t alarmTarget, offer sdpInfo) (bool, string) {
 	if secureAudio {
 		if !offer.AudioCrypto.OK {
 			c.cleanupAttempt()
-			return false, "failed"
+			return c.localFailure(t, "srtp-offer-audio", fmt.Errorf("SAVP audio without a=crypto"))
 		}
 		if aAudioKey, err = newSRTPKeyFor(offer.AudioCrypto.Suite); err != nil {
 			c.cleanupAttempt()
-			return false, "failed"
+			return c.localFailure(t, "srtp-key-audio-a", err)
 		}
 		if bAudioKey, err = newSRTPKeyFor(offer.AudioCrypto.Suite); err != nil {
 			c.cleanupAttempt()
-			return false, "failed"
+			return c.localFailure(t, "srtp-key-audio-b", err)
 		}
 	}
 	if secureVideo {
 		if !offer.VideoCrypto.OK {
 			c.cleanupAttempt()
-			return false, "failed"
+			return c.localFailure(t, "srtp-offer-video", fmt.Errorf("SAVP video without a=crypto"))
 		}
 		if aVideoKey, err = newSRTPKeyFor(offer.VideoCrypto.Suite); err != nil {
 			c.cleanupAttempt()
-			return false, "failed"
+			return c.localFailure(t, "srtp-key-video-a", err)
 		}
 		if bVideoKey, err = newSRTPKeyFor(offer.VideoCrypto.Suite); err != nil {
 			c.cleanupAttempt()
-			return false, "failed"
+			return c.localFailure(t, "srtp-key-video-b", err)
 		}
 	}
 	audioCryptoB, videoCryptoB := "", ""
@@ -419,12 +419,12 @@ func (c *call) tryTarget(t alarmTarget, offer sdpInfo) (bool, string) {
 	sdpB, err := rewriteSDPWithCrypto(c.a.InviteRequest.Body(), rb.port(), videoPortB, s.advertiseHost, audioCryptoB, videoCryptoB)
 	if err != nil {
 		c.cleanupAttempt()
-		return false, "failed"
+		return c.localFailure(t, "sdp-rewrite", err)
 	}
 	uri, err := contactURIForView(t.view)
 	if err != nil {
 		c.cleanupAttempt()
-		return false, "failed"
+		return c.localFailure(t, "contact-uri", err)
 	}
 	caller := c.from
 	if caller == "" {
@@ -1216,4 +1216,16 @@ func (c *call) aContactHeader() *sip.ContactHeader {
 		tp = c.a.InviteRequest.Transport()
 	}
 	return c.server.contactForTransport(tp)
+}
+
+func (c *call) localFailure(t alarmTarget, stage string, err error) (bool, string) {
+	msg := stage
+	if err != nil {
+		msg += ": " + err.Error()
+	}
+	c.stateMu.Lock()
+	c.lastError = msg
+	c.stateMu.Unlock()
+	c.server.log.Warn("b-leg prepare failed", "call_id", c.id, "to", t.view.Ext, "stage", stage, "error", err)
+	return false, "failed"
 }

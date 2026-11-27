@@ -1,12 +1,24 @@
 # MCS 更新说明
 
-> 当前版本：**0.15.0**
+> 当前版本：**0.15.1**
 > 更新日期：2026-11-27
 > 适用：Windows 服务版、Linux 手动部署、源码部署
 
 本文记录近期已交付的功能、升级注意事项和当前边界。详细操作见
 [用户使用手册](MCS-用户使用手册.pdf)、[部署与运维手册](MCS-使用手册.md)、
 [API 参考](MCS-API参考.md) 和 [架构说明](MCS-架构说明.md)。
+
+## 0.15.1：B 腿准备阶段失败诊断
+
+- B 腿在发出 INVITE 前失败时，不再留下空的 `b_leg_code=0 b_leg_error=`；
+- 新增 `b-leg prepare failed` 日志，记录失败阶段：
+  - rtp-relay
+  - recorder
+  - srtp-key
+  - sdp-rewrite
+  - contact-uri
+- `call rejected` 的 `b_leg_error` 会包含具体阶段和错误；
+- 用于定位“1005 没有收到 INVITE”这类 MCS 本地准备失败。
 
 ## 0.15.0：TLS 会话 Contact 合规与 B 腿状态落库
 
@@ -371,6 +383,7 @@ systemctl start mcs
 
 | 版本 | 主要内容 |
 | --- | --- |
+| 0.15.1 | B 腿准备阶段失败日志（Contact/SDP/SRTP/relay） |
 | 0.15.0 | TLS Contact sips 修复、A/B/广播/心跳 Contact、CDR B 腿码 |
 | 0.14.4 | B 腿真实失败码/原因透传与日志 |
 | 0.14.3 | 实时日志复制、布局、筛选下载 |
@@ -391,7 +404,7 @@ Windows 0.14.0 包：
 
 ```text
 dist/MCS-Windows-Build-0.14.0.zip
-SHA-256: df231a5f46e626beef1f7df51d1c0ea00f1043a230e881028f6f91f5445ec7d4
+SHA-256: 6ba693f94749f5bd7b69089969e4c20f02691d5521b43436f26b9e1784798ff7
 ```
 
 > 安装包和二进制属于构建产物，不在 Git 仓库中；源码提交以仓库 `main` 分支为准。

@@ -1,4 +1,4 @@
-VERSION ?= 0.15.0
+VERSION ?= 0.15.1
 BIN := bin
 
 .PHONY: build uasim test run run-https dev-cert linux windows darwin dist package clean fmt vet
