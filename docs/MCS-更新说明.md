@@ -1,12 +1,22 @@
 # MCS 更新说明
 
-> 当前版本：**0.16.0**
+> 当前版本：**0.16.1**
 > 更新日期：2026-11-27
 > 适用：Windows 服务版、Linux 手动部署、源码部署
 
 本文记录近期已交付的功能、升级注意事项和当前边界。详细操作见
 [用户使用手册](MCS-用户使用手册.pdf)、[部署与运维手册](MCS-使用手册.md)、
 [API 参考](MCS-API参考.md) 和 [架构说明](MCS-架构说明.md)。
+
+## 0.16.1：SDP origin/RTCP 地址修复
+
+- `rewriteSDPWithCrypto` 现在同时替换：
+  - `o=` origin 的 IP；
+  - `c=` 连接地址；
+  - `a=rtcp:<port> IN IP4 <address>` 的 RTCP 地址；
+- 不再向对端发送 `198.18.0.0/15` 等 VPN fake-IP；
+- 修复 RTCP 被设备发往 fake-IP 导致 RTCP 丢失、NACK/PLI 和音视频同步异常；
+- 新增 origin/RTCP 地址回归测试。
 
 ## 0.16.0：SDP 媒体属性顺序修复
 
@@ -398,6 +408,7 @@ systemctl start mcs
 
 | 版本 | 主要内容 |
 | --- | --- |
+| 0.16.1 | SDP origin/RTCP 地址修复，去除 VPN fake-IP |
 | 0.16.0 | SDP 媒体属性顺序修复（m/i/c/b/k/a） |
 | 0.15.1 | B 腿准备阶段失败日志（Contact/SDP/SRTP/relay） |
 | 0.15.0 | TLS Contact sips 修复、A/B/广播/心跳 Contact、CDR B 腿码 |
@@ -420,7 +431,7 @@ Windows 0.14.0 包：
 
 ```text
 dist/MCS-Windows-Build-0.14.0.zip
-SHA-256: 8886b8ce0a1a7905068d87c4557160ac117491a47c18c97f7b3154301f927f21
+SHA-256: af35029ca9af7b86dc48ab54b1637c055b5607a403fbc745f2b63d11f63a3a08
 ```
 
 > 安装包和二进制属于构建产物，不在 Git 仓库中；源码提交以仓库 `main` 分支为准。

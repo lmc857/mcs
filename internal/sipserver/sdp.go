@@ -219,10 +219,14 @@ func rewriteSDPWithCrypto(body []byte, audioPort, videoPort int, ip, audioCrypto
 			} else {
 				block = append(block, line)
 			}
+		case media == "" && strings.HasPrefix(trimmed, "o="):
+			out = append(out, rewriteOriginIP(line, ip))
 		case media == "" && strings.HasPrefix(trimmed, "c=IN IP4 "):
 			out = append(out, "c=IN IP4 "+ip)
 		case media != "" && strings.HasPrefix(trimmed, "c=IN IP4 "):
 			block = append(block, "c=IN IP4 "+ip)
+		case media != "" && strings.HasPrefix(trimmed, "a=rtcp:"):
+			block = append(block, rewriteRTCPIP(line, ip))
 		case media != "" && strings.HasPrefix(trimmed, "a=crypto:"):
 			// Replaced at flush time with the MCS-generated key.
 		default:
@@ -238,4 +242,24 @@ func rewriteSDPWithCrypto(body []byte, audioPort, videoPort int, ip, audioCrypto
 		return nil, fmt.Errorf("sdp has no audio media")
 	}
 	return []byte(strings.Join(out, "\r\n") + "\r\n"), nil
+}
+
+func rewriteOriginIP(line, ip string) string {
+	fields := strings.Fields(line)
+	// o=<username> <sess-id> <sess-version> <nettype> <addrtype> <address>
+	if len(fields) >= 6 && strings.EqualFold(fields[3], "IN") && strings.EqualFold(fields[4], "IP4") {
+		fields[5] = ip
+		return strings.Join(fields, " ")
+	}
+	return line
+}
+
+func rewriteRTCPIP(line, ip string) string {
+	fields := strings.Fields(line)
+	// a=rtcp:<port> [IN IP4 <address>]
+	if len(fields) >= 4 && strings.EqualFold(fields[1], "IN") && strings.EqualFold(fields[2], "IP4") {
+		fields[3] = ip
+		return strings.Join(fields, " ")
+	}
+	return line
 }

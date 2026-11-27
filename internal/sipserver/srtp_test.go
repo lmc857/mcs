@@ -323,3 +323,33 @@ func TestSDPRewriteCanonicalMediaOrder(t *testing.T) {
 		t.Fatalf("old crypto key leaked:\n%s", out)
 	}
 }
+
+func TestSDPRewriteTransportAddresses(t *testing.T) {
+	body := []byte("v=0\r\n" +
+		"o=- 4004784293 4004784293 IN IP4 198.18.0.1\r\n" +
+		"s=-\r\n" +
+		"c=IN IP4 198.18.0.1\r\n" +
+		"t=0 0\r\n" +
+		"m=audio 10000 RTP/SAVP 0\r\n" +
+		"a=rtcp:4019 IN IP4 198.18.0.1\r\n" +
+		"a=rtpmap:0 PCMU/8000\r\n" +
+		"a=crypto:1 AES_CM_128_HMAC_SHA1_80 inline:old\r\n")
+	out, err := rewriteSDPWithCrypto(body, 20000, 0, "192.168.68.106",
+		"1 AES_CM_128_HMAC_SHA1_80 inline:new", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(out)
+	if strings.Contains(text, "198.18.0.1") {
+		t.Fatalf("fake IP remained:\n%s", text)
+	}
+	if !strings.Contains(text, "o=- 4004784293 4004784293 IN IP4 192.168.68.106") {
+		t.Fatalf("origin not rewritten:\n%s", text)
+	}
+	if !strings.Contains(text, "c=IN IP4 192.168.68.106") {
+		t.Fatalf("connection not rewritten:\n%s", text)
+	}
+	if !strings.Contains(text, "a=rtcp:4019 IN IP4 192.168.68.106") {
+		t.Fatalf("RTCP address not rewritten:\n%s", text)
+	}
+}

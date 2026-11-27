@@ -50,7 +50,7 @@ body { margin:0; color:var(--ink); font-family:"PingFang SC","Microsoft YaHei","
   <div class="kicker">报警 · 对讲 · 广播融合通信服务器</div>
   <h1>MCS 用户<br>使用手册</h1>
   <div class="rule"></div>
-  <div class="meta">适用版本：MCS 0.16.0<br>文档版本：2026-11-23<br>适用对象：值班人员、操作员、系统管理员</div>
+  <div class="meta">适用版本：MCS 0.16.1<br>文档版本：2026-11-23<br>适用对象：值班人员、操作员、系统管理员</div>
   <div class="foot">覆盖设备、报警、对讲、广播、寻呼、会议、系统设置与运维。<br>请结合实际网络、分区和设备配置使用。</div>
 </section>
 <nav class="toc">
@@ -1227,6 +1227,12 @@ b=...
 </code></pre>
 <p>对 SDP 顺序校验严格的终端可能因此解析失败或出现 488。</p>
 <p>现在 <code>a=crypto</code> 会插入在媒体级固定字段之后、原有属性之前。</p>
+<p>同时修复：</p>
+<ul>
+<li><code>o=</code> 中的 origin IP；</li>
+<li><code>a=rtcp:&lt;port&gt; IN IP4 &lt;addr&gt;</code> 中的 RTCP 地址。</li>
+</ul>
+<p>不再把 <code>198.18.0.1</code> 这类 VPN fake-IP 带进 MCS 发出的 SDP。</p>
 <h3>17.3 能接通但没有声音</h3>
 <p>检查：</p>
 <ul>
