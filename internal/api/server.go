@@ -302,7 +302,7 @@ func (s *Server) intercomUnlock(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 409, map[string]any{"code": "UNLOCK_FAILED", "message": err.Error()})
 		return
 	}
-	writeJSON(w, 200, map[string]any{"status": "ok"})
+	writeJSON(w, 200, map[string]any{"status": "ok", "version": s.version})
 }
 
 var snapshotClient = &http.Client{Timeout: 5 * time.Second}
@@ -508,7 +508,7 @@ func (s *Server) zoneUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.persistZones()
-	writeJSON(w, 200, map[string]any{"status": "ok"})
+	writeJSON(w, 200, map[string]any{"status": "ok", "version": s.version})
 }
 
 func (s *Server) zoneDelete(w http.ResponseWriter, r *http.Request) {
@@ -543,7 +543,7 @@ func (s *Server) zoneDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.persistZones()
-	writeJSON(w, 200, map[string]any{"status": "ok"})
+	writeJSON(w, 200, map[string]any{"status": "ok", "version": s.version})
 }
 
 func (s *Server) broadcastActive(w http.ResponseWriter, r *http.Request) {
@@ -1039,7 +1039,7 @@ func (s *Server) pagingStop(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 404, map[string]any{"code": "NOT_FOUND", "message": err.Error()})
 		return
 	}
-	writeJSON(w, 200, map[string]any{"status": "ok"})
+	writeJSON(w, 200, map[string]any{"status": "ok", "version": s.version})
 }
 
 func (s *Server) conferenceList(w http.ResponseWriter, r *http.Request) {
@@ -1150,7 +1150,7 @@ func (s *Server) conferenceRoomUpdate(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 400, map[string]any{"code": "VALIDATION_FAILED", "message": err.Error()})
 		return
 	}
-	writeJSON(w, 200, map[string]any{"status": "ok"})
+	writeJSON(w, 200, map[string]any{"status": "ok", "version": s.version})
 }
 
 func (s *Server) conferenceRoomDelete(w http.ResponseWriter, r *http.Request) {
@@ -1158,7 +1158,7 @@ func (s *Server) conferenceRoomDelete(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 400, map[string]any{"code": "VALIDATION_FAILED", "message": err.Error()})
 		return
 	}
-	writeJSON(w, 200, map[string]any{"status": "ok"})
+	writeJSON(w, 200, map[string]any{"status": "ok", "version": s.version})
 }
 
 func (s *Server) conferenceWebRTC(w http.ResponseWriter, r *http.Request) {
@@ -1189,7 +1189,7 @@ func (s *Server) conferenceKick(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 404, map[string]any{"code": "NOT_FOUND", "message": err.Error()})
 		return
 	}
-	writeJSON(w, 200, map[string]any{"status": "ok"})
+	writeJSON(w, 200, map[string]any{"status": "ok", "version": s.version})
 }
 
 func (s *Server) conferenceMute(w http.ResponseWriter, r *http.Request) {
@@ -1270,7 +1270,7 @@ func (s *Server) logsWS(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) health(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, 200, map[string]any{"status": "ok"})
+	writeJSON(w, 200, map[string]any{"status": "ok", "version": s.version})
 }
 
 type ttsConfigView struct {

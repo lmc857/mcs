@@ -42,6 +42,7 @@ nav{padding:4px 10px;overflow:auto;flex:1}
 .topbar h1{font-size:19px;font-weight:700;letter-spacing:-.01em}
 .topbar .sub{color:var(--muted);font-size:12px;margin-top:2px}
 .top-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.version-chip{display:inline-flex;align-items:center;border:1px solid var(--line);background:#f8fafc;color:#475569;border-radius:999px;padding:4px 9px;font-size:11px;white-space:nowrap}
 .live{display:flex;align-items:center;gap:7px;color:var(--muted);font-size:12px}
 .pulse{width:7px;height:7px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 3px rgba(22,163,74,.12)}
 .content{padding:24px 28px 40px;max-width:1500px;width:100%;margin:0 auto}
@@ -156,7 +157,7 @@ textarea.bc-text{margin:0 17px 12px;width:calc(100% - 34px)}
 <div id="login-modal" class="modal" hidden>
   <div class="modal-card login">
     <h2>登录 MCS</h2>
-    <div class="desc">输入控制台账号继续</div>
+    <div class="desc">输入控制台账号继续<br><span id="login-version">MCS</span></div>
     <div class="form stacked">
       <input type="text" id="login-user" placeholder="用户名" value="admin" autocomplete="username">
       <input type="password" id="login-pass" placeholder="密码" autocomplete="current-password" onkeydown="if(event.key==='Enter') doLogin()">
@@ -262,7 +263,7 @@ textarea.bc-text{margin:0 17px 12px;width:calc(100% - 34px)}
       <button class="nav-item" data-tab="tts" data-admin-only onclick="showTab('tts')">TTS 设置</button>
       <button class="nav-item" data-tab="system" onclick="showTab('system')">系统信息</button>
     </nav>
-    <div class="sidebar-foot">MCS · 私有化通信服务器</div>
+    <div class="sidebar-foot"><span id="sidebar-version">MCS</span> · 私有化通信服务器</div>
   </aside>
 
   <div class="main">
@@ -272,6 +273,7 @@ textarea.bc-text{margin:0 17px 12px;width:calc(100% - 34px)}
         <div class="sub" id="page-sub">常用操作与运行概况</div>
       </div>
       <div class="top-actions">
+        <span class="version-chip" id="app-version">MCS · 版本读取中</span>
         <span class="hint" id="who"></span>
         <button class="btn btn-sm" onclick="testAlarm()">测试报警</button>
         <span class="live"><span class="pulse"></span><span id="updated">等待数据…</span></span>
@@ -1725,7 +1727,22 @@ function startApp(){
   setInterval(refresh, 2000);
 }
 
+function applyVersion(v){
+  const ver = v || '未知';
+  for(const [id, text] of [['app-version','MCS · ' + ver], ['sidebar-version','MCS ' + ver], ['login-version','MCS ' + ver], ['sys-version',ver], ['ov-version',ver]]){
+    const el = $(id); if(el) el.textContent = text;
+  }
+}
+
+async function loadPublicVersion(){
+  try{
+    const h = await fetch('/api/v1/healthz', {cache:'no-store'});
+    if(h.ok){ const d = await h.json(); applyVersion(d.version); }
+  }catch(e){}
+}
+
 async function boot(){
+  loadPublicVersion();
   try{
     const s = await fetch('/api/v1/session').then(r => r.json());
     if(s.auth_required && !s.logged_in){
@@ -2373,8 +2390,7 @@ async function loadSystemInfo(){
   try{
     const info = await getJSON('/api/v1/system/info');
     const set = (id, v) => { const el = $(id); if(el) el.textContent = v; };
-    set('sys-version', info.version || '—');
-    set('ov-version', info.version || '—');
+    applyVersion(info.version);
     set('sys-uptime', (info.uptime_s >= 3600 ? Math.floor(info.uptime_s/3600) + ' 小时 ' : '') + Math.floor((info.uptime_s%3600)/60) + ' 分钟');
     set('ov-uptime', (info.uptime_s >= 3600 ? Math.floor(info.uptime_s/3600) + 'h ' : '') + Math.floor((info.uptime_s%3600)/60) + 'm');
     set('sys-devices', info.devices ?? '—');
