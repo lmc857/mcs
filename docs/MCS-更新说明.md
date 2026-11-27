@@ -1,12 +1,21 @@
 # MCS 更新说明
 
-> 当前版本：**0.16.2**
+> 当前版本：**0.16.3**
 > 更新日期：2026-11-27
 > 适用：Windows 服务版、Linux 手动部署、源码部署
 
 本文记录近期已交付的功能、升级注意事项和当前边界。详细操作见
 [用户使用手册](MCS-用户使用手册.pdf)、[部署与运维手册](MCS-使用手册.md)、
 [API 参考](MCS-API参考.md) 和 [架构说明](MCS-架构说明.md)。
+
+## 0.16.3：自动补全 RTCP 地址
+
+- 如果原始 SDP 没有 `a=rtcp`，改写后的媒体段会自动补：
+  - `a=rtcp:<MCS relay 端口> IN IP4 <MCS 地址>`
+- 有 `a=rtcp-mux` 时不补，避免冲突；
+- 有 `a=rtcp` 时继续改写 IP 和端口；
+- 确保对端不会按默认 RTP+1 把 RTCP 发到 MCS 未监听的端口；
+- 音频/视频媒体段分别使用自己的 relay 端口。
 
 ## 0.16.2：SDP RTCP 端口修复
 
@@ -418,6 +427,7 @@ systemctl start mcs
 
 | 版本 | 主要内容 |
 | --- | --- |
+| 0.16.3 | SDP 缺失 a=rtcp 时自动补全 MCS relay 端口 |
 | 0.16.2 | SDP RTCP 端口改写为 MCS relay 端口 |
 | 0.16.1 | SDP origin/RTCP 地址修复，去除 VPN fake-IP |
 | 0.16.0 | SDP 媒体属性顺序修复（m/i/c/b/k/a） |
@@ -442,7 +452,7 @@ Windows 0.14.0 包：
 
 ```text
 dist/MCS-Windows-Build-0.14.0.zip
-SHA-256: 4b760a9b56d7126f34c474a83cc8d58ddc3963b803647a49e39b1fa727436501
+SHA-256: d53c2035bd2f4021a6bc5a264100b3ad682504a69c6fdfde52556bf1fc89d2dc
 ```
 
 > 安装包和二进制属于构建产物，不在 Git 仓库中；源码提交以仓库 `main` 分支为准。

@@ -168,21 +168,29 @@ func rewriteSDPWithCrypto(body []byte, audioPort, videoPort int, ip, audioCrypto
 				crypto = videoCrypto
 			}
 		}
-		if crypto != "" {
-			// SDP media section order is m=, i=, c=, b=, k=, a=.
-			// a=crypto is an attribute, so it must come after the fixed
-			// media lines, not immediately after m=.
-			insert := len(block)
-			for i, line := range block {
-				if strings.HasPrefix(strings.TrimSpace(line), "a=") {
-					insert = i
-					break
-				}
+		hasRTCP, hasMux, hasCrypto := false, false, false
+		for _, line := range block {
+			switch {
+			case strings.HasPrefix(strings.TrimSpace(line), "a=rtcp:"):
+				hasRTCP = true
+			case strings.HasPrefix(strings.TrimSpace(line), "a=rtcp-mux"):
+				hasMux = true
+			case strings.HasPrefix(strings.TrimSpace(line), "a=crypto:"):
+				hasCrypto = true
 			}
-			cryptoLine := "a=crypto:" + crypto
-			block = append(block, "")
-			copy(block[insert+1:], block[insert:])
-			block[insert] = cryptoLine
+		}
+		port := audioPort
+		if media == "video" {
+			port = 0
+			if videoPortSet {
+				port = videoPort
+			}
+		}
+		if port > 0 && !hasRTCP && !hasMux {
+			block = insertBeforeAttributes(block, fmt.Sprintf("a=rtcp:%d IN IP4 %s", port, ip))
+		}
+		if crypto != "" && !hasCrypto {
+			block = insertBeforeAttributes(block, "a=crypto:"+crypto)
 		}
 		out = append(out, block...)
 		block = nil
@@ -246,6 +254,20 @@ func rewriteSDPWithCrypto(body []byte, audioPort, videoPort int, ip, audioCrypto
 		return nil, fmt.Errorf("sdp has no audio media")
 	}
 	return []byte(strings.Join(out, "\r\n") + "\r\n"), nil
+}
+
+func insertBeforeAttributes(block []string, line string) []string {
+	insert := len(block)
+	for i, item := range block {
+		if strings.HasPrefix(strings.TrimSpace(item), "a=") {
+			insert = i
+			break
+		}
+	}
+	block = append(block, "")
+	copy(block[insert+1:], block[insert:])
+	block[insert] = line
+	return block
 }
 
 func rewriteOriginIP(line, ip string) string {

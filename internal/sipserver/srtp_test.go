@@ -308,9 +308,9 @@ func TestSDPRewriteCanonicalMediaOrder(t *testing.T) {
 				order = append(order, line[:2])
 			}
 		}
-		want := []string{"m=", "i=", "c=", "b=", "k=", "a=", "a="}
+		want := []string{"m=", "i=", "c=", "b=", "k=", "a=", "a=", "a="}
 		if n == 0 {
-			want = []string{"m=", "i=", "c=", "b=", "k=", "a=", "a="}
+			want = []string{"m=", "i=", "c=", "b=", "k=", "a=", "a=", "a="}
 		}
 		if strings.Join(order, ",") != strings.Join(want, ",") {
 			t.Fatalf("media %d order = %v, want %v\n%s", n, order, want, out)
